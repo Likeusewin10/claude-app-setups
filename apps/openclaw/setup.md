@@ -10,14 +10,23 @@
 
 本文件由 catalog 仓库统一托管：`Likeusewin10/claude-app-setups`，canonical raw 地址为
 `https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/openclaw/setup.md`。
-飞书 wiki 页面做“落地页”，只放下面这段**引导语**，让新手复制粘贴给 Claude Code：
+飞书 wiki 页面做“落地页”，放下面这段**引导语**让新手复制。
+**关键**：第 1 步由用户在终端执行、并在同一终端启动 Claude Code，env 才能被继承（Claude Code 跨命令不保留 env，不能让它自己 export）。
+
+终端先执行：
+
+```bash
+export RELAY_API_KEY=sk-你的通用key
+claude
+```
+
+再发给 Claude Code：
 
 ```text
-请按以下步骤帮我装好 OpenClaw，全程用中文跟我沟通：
-1. 先在终端执行：export RELAY_API_KEY=sk-你的通用key
-2. 再执行：curl -fsSL https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/openclaw/setup.md -o setup.md
-3. 读取 setup.md，严格按里面的步骤逐步执行，
-   每一步先做校验，校验不过就停下排查，需要我操作时再叫我。
+请帮我装好 OpenClaw，全程用中文沟通：
+1. 先执行 printf '%s\n' "${RELAY_API_KEY:+set}" 确认能读到 RELAY_API_KEY（应输出 set）；为空就停下让我先 export 再重启你。
+2. 执行：curl -fsSL https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/openclaw/setup.md -o setup.md
+3. 读取 setup.md，严格按步骤逐步执行，每步先校验，需要我操作时再叫我。
 ```
 
 - 密钥 `sk-...` 只出现在你受控的飞书 wiki 落地页里，**不要写进本文件或仓库**。
@@ -31,7 +40,7 @@
 - 平台假设 macOS / Linux。Windows 见末尾「Windows 备注」。
 - **逐步执行，每步带校验门**：校验不过不要进入下一步，先看 `openclaw logs --follow` 排查并告诉用户结论。
 - 只有以下环节需要**用户本人**操作，到时停下来清楚地引导他：在飞书开放平台建应用 / 授权 / 发布 / 把机器人拉进群 / 在飞书里发测试消息。其余命令你自己跑。
-- 先确认 `RELAY_API_KEY` 已设置：`printf '%s' "${RELAY_API_KEY:+set}"`。若为空，让用户回到飞书 wiki 落地页执行 `export RELAY_API_KEY=sk-...` 后重来。
+- 先确认 `RELAY_API_KEY` 已设置：`printf '%s' "${RELAY_API_KEY:+set}"`（应输出 `set`）。若为空，**停下**让用户在终端 `export RELAY_API_KEY=sk-...` 后**重启 Claude Code**（env 不跨命令保留，你自己 export 无效）。
 
 ---
 
