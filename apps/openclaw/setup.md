@@ -37,45 +37,69 @@ claude
 ## 给 Claude Code：执行总则
 
 - 你的目标：把 OpenClaw 装好、用中转站配好模型、接入飞书、最后**自我验证打通**。
-- 平台假设 macOS / Linux。Windows 见末尾「Windows 备注」。
+- **流程对所有系统一致；只有个别命令分平台**。第 0 步会先探测操作系统，之后凡命令给出 `macOS / Linux:` 与 `Windows (PowerShell):` 两版的，按探测结果选对应那版执行；只写一份的（纯 `openclaw` 子命令）两平台通用。Windows 用户若在 **WSL / Git-Bash**（有 `bash`/`find`/`/tmp`）按 macOS / Linux 版走；在**原生 PowerShell / Windows Terminal** 才用 Windows 版。不要在 PowerShell 里照搬 bash 的 `\` 续行、`$(...)`、`find`、`rm`、`/tmp`、`grep`。
 - **逐步执行，每步带校验门**：校验不过不要进入下一步，先看 `openclaw logs --follow` 排查并告诉用户结论。
 - **飞书接入首选「扫码自动建应用」**（第 5 步），用户只需用手机扫一次码、点同意，应用 / 事件订阅 / 权限 / 长连接全部自动配好，无需去开放平台手动操作。手动建应用是备选（见第 5 步附录）。
 - 需要**用户本人**操作的环节只有：扫码授权、配对放行时的私聊、把机器人拉进群、发测试消息。到时停下来清楚引导，其余命令你自己跑。
-- 先确认 `RELAY_API_KEY` 已设置：`printf '%s\n' "${RELAY_API_KEY:+set}"`（应输出 `set`）。若为空，**停下**让用户在终端 `export RELAY_API_KEY=sk-...` 后**重启 Claude Code**（env 不跨命令保留，你自己 export 无效）。
+- 先确认 `RELAY_API_KEY` 已设置。**macOS / Linux:** `printf '%s\n' "${RELAY_API_KEY:+set}"`（应输出 `set`）；**Windows (PowerShell):** `if ($env:RELAY_API_KEY) { "set" } else { "EMPTY" }`。若为空，**停下**让用户在终端设置后**重启 Claude Code**（env 不跨命令保留，你自己设无效）——macOS / Linux 用 `export RELAY_API_KEY=sk-...`；Windows 当前会话用 `$env:RELAY_API_KEY="sk-..."`，要持久化用 `setx RELAY_API_KEY "sk-..."`（新开终端才生效）。
 
 ---
 
-## 第 0 步 · 环境预检
+## 第 0 步 · 环境预检（含操作系统判定）
+
+先判定操作系统（决定后续遇到分平台命令时选哪版），再看 Node 版本：
 
 ```bash
+node -e "console.log('platform=' + process.platform)"   # darwin=macOS / linux / win32=Windows
 node --version
 ```
 
-- 需要 Node ≥ 22.19（推荐 24）。版本不够或没装也没关系，下一步的安装脚本会补 Node。
+- `platform=win32` → 后续选 **Windows (PowerShell)** 版命令（除非用户在 WSL/Git-Bash，则按 macOS / Linux 版）。`darwin` / `linux` → 选 **macOS / Linux** 版。
+- 需要 Node ≥ 22.19（推荐 24）。版本不够或没装也没关系，下一步的安装脚本会补 Node（连 `node` 都没有时，先按第 1 步装好再回看版本）。
 
-校验门：能打印版本即可继续；命令不存在也继续（安装脚本会装 Node）。
+校验门：记下平台即可继续；Node 命令不存在也继续（安装脚本会装 Node）。
 
 ---
 
 ## 第 1 步 · 安装 OpenClaw
 
+**macOS / Linux:**
+
 ```bash
 curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --no-onboard
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+iwr -useb https://openclaw.ai/install.ps1 | iex
+```
+
+> Windows 安装脚本会自动补 Node（winget→choco→scoop→portable-node 多级回退）并写入用户 PATH。
+
 装完刷新 PATH 并校验：
+
+**macOS / Linux:**
 
 ```bash
 hash -r 2>/dev/null || true
 openclaw --version
 ```
 
+**Windows (PowerShell):** 无需 `hash -r`，**新开一个终端窗口**后：
+
+```powershell
+openclaw --version
+```
+
 校验门：`openclaw --version` 打印出版本号。
-若提示 `command not found`：让用户**新开一个终端窗口**再试（PATH 未刷新），或参考 https://docs.openclaw.ai/install/node#troubleshooting 。
+若提示 `command not found` / `不是内部或外部命令`：让用户**新开一个终端窗口**再试（PATH 未刷新），或参考 https://docs.openclaw.ai/install/node#troubleshooting 。
 
 ---
 
 ## 第 2 步 · 非交互 onboard（接入 qqqrouter 中转站，模型 gpt-5.5）
+
+**macOS / Linux:**
 
 ```bash
 openclaw onboard --non-interactive --accept-risk --mode local \
@@ -88,6 +112,22 @@ openclaw onboard --non-interactive --accept-risk --mode local \
   --secret-input-mode plaintext \
   --gateway-port 18789 --gateway-bind loopback \
   --install-daemon --daemon-runtime node \
+  --json
+```
+
+**Windows (PowerShell):** 续行符是反引号 `` ` ``（不是 `\`），变量是 `$env:RELAY_API_KEY`：
+
+```powershell
+openclaw onboard --non-interactive --accept-risk --mode local `
+  --auth-choice custom-api-key `
+  --custom-base-url "https://console.qqqrouter.ai/v1" `
+  --custom-model-id "gpt-5.5" `
+  --custom-api-key "$env:RELAY_API_KEY" `
+  --custom-provider-id "qqqrouter" `
+  --custom-compatibility openai-responses `
+  --secret-input-mode plaintext `
+  --gateway-port 18789 --gateway-bind loopback `
+  --install-daemon --daemon-runtime node `
   --json
 ```
 
@@ -155,30 +195,55 @@ openclaw plugins list | grep -i feishu
 
 ### 5.1 定位插件路径（版本无关，不要硬编码 hash）
 
+**macOS / Linux:**
+
 ```bash
-CORE_DIR=$(dirname "$(dirname "$(readlink -f "$(command -v openclaw)" 2>/dev/null || command -v openclaw)")")/lib/node_modules/openclaw
-# 兜底：直接全局解析
-node -e "console.log(require.resolve('openclaw/package.json'))" 2>/dev/null
 REG_FILE=$(find "$HOME/.openclaw/npm/projects" -path "*@openclaw/feishu/dist/app-registration-*.js" 2>/dev/null | head -1)
-MEDIA_RT=$(find "$HOME/.nvm" "/usr/local/lib" "/opt/homebrew/lib" "$HOME/.openclaw" -path "*openclaw/dist/plugin-sdk/media-runtime.js" 2>/dev/null | head -1)
+MEDIA_RT="$(npm root -g)/openclaw/dist/plugin-sdk/media-runtime.js"
 echo "REG_FILE=$REG_FILE"
 echo "MEDIA_RT=$MEDIA_RT"
+[ -f "$MEDIA_RT" ] && echo "MEDIA_RT ok"
 ```
 
-校验门：`REG_FILE` 和 `MEDIA_RT` 都非空。`REG_FILE` 是飞书插件的注册模块，`MEDIA_RT` 是核心包里的二维码渲染工具。两者找不到时，用 `openclaw plugins inspect feishu` 看插件安装根目录，或回退到第 5 步附录的手动建应用方案。
+**Windows (PowerShell):**
 
-### 5.2 写扫码脚本（Claude Code 生成到 /tmp）
+```powershell
+$RegFile = (Get-ChildItem "$env:USERPROFILE\.openclaw\npm\projects" -Recurse -Filter "app-registration-*.js" -ErrorAction SilentlyContinue |
+            Where-Object FullName -match "@openclaw[\\/]feishu[\\/]dist" | Select-Object -First 1).FullName
+$MediaRt = Join-Path (npm root -g) "openclaw\dist\plugin-sdk\media-runtime.js"
+"REG_FILE=$RegFile"
+"MEDIA_RT=$MediaRt"
+Test-Path $MediaRt
+```
 
-把下面内容写进 `/tmp/feishu-scan.mjs`，将 `__REG_FILE__` / `__MEDIA_RT__` 替换成上一步得到的真实路径：
+校验门：`REG_FILE` / `MEDIA_RT` 都非空，且 `MEDIA_RT` 文件存在。`REG_FILE` 是飞书插件的注册模块（文件名带 hash，如 `app-registration-xxxx.js`，**靠通配匹配、不要硬编码**），`MEDIA_RT` 是核心包里的二维码渲染工具（`npm root -g` 拼出，不依赖 Node 装在哪）。找不到时，用 `openclaw plugins inspect feishu` 看插件安装根目录，或回退到第 5 步附录的手动建应用方案。
+
+### 5.2 写扫码脚本（跨平台一份，Claude Code 生成到临时目录）
+
+把下面内容写进临时目录的 `feishu-scan.mjs`（脚本用 `os.tmpdir()` 自动适配 macOS / Linux 的 `/tmp` 与 Windows 的 `%TEMP%`，并按平台选打开图片的方式）。将 `__REG_FILE__` / `__MEDIA_RT__` 替换成上一步得到的真实路径（Windows 路径里的 `\` 在 JS 字符串中写成 `\\`，或直接用 `/`，Node 在 Windows 上都认）：
 
 ```js
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const SCAN_TP = "ob_cli_app";                 // 扫码注册的来源标记，固定值
+const TMP = os.tmpdir();                       // 跨平台临时目录
+const QR_PNG = path.join(TMP, "feishu-qr.png");
+const CREDS = path.join(TMP, "feishu-creds.json");
 const domain = process.env.FEISHU_DOMAIN === "lark" ? "lark" : "feishu";
 const reg = await import("__REG_FILE__");
 const media = await import("__MEDIA_RT__");
+
+// 按平台打开图片：macOS=open / Windows=cmd start / Linux=xdg-open
+function openImage(file) {
+  try {
+    if (process.platform === "darwin") execFileSync("open", [file]);
+    else if (process.platform === "win32") execFileSync("cmd", ["/c", "start", "", file]);
+    else execFileSync("xdg-open", [file]);
+  } catch {}
+}
 
 try { await reg.initAppRegistration(domain); }
 catch (e) { console.error("[错误] 当前环境不支持扫码注册:", e.message); process.exit(2); }
@@ -191,15 +256,15 @@ let saved = null;
 try {
   const d = await media.renderQrPngDataUrl(begin.qrUrl);
   const b64 = String(d).split(",")[1] ?? "";
-  if (b64) { fs.writeFileSync("/tmp/feishu-qr.png", Buffer.from(b64, "base64")); saved = "/tmp/feishu-qr.png"; }
+  if (b64) { fs.writeFileSync(QR_PNG, Buffer.from(b64, "base64")); saved = QR_PNG; }
 } catch {}
 if (!saved) {
   try {
     const b = await media.renderQrPngBase64(begin.qrUrl);
-    fs.writeFileSync("/tmp/feishu-qr.png", Buffer.from(String(b), "base64")); saved = "/tmp/feishu-qr.png";
+    fs.writeFileSync(QR_PNG, Buffer.from(String(b), "base64")); saved = QR_PNG;
   } catch (e) { console.error("[警告] 二维码图片生成失败:", e.message); }
 }
-if (saved) { console.log("二维码图片:", saved); try { execFileSync("open", [saved]); } catch {} }
+if (saved) { console.log("二维码图片:", saved); openImage(saved); }
 
 console.log(`等待扫码授权中（最长 ${begin.expireIn}s）...`);
 const outcome = await reg.pollAppRegistration({
@@ -211,25 +276,35 @@ if (outcome.status !== "success") {
 }
 const { appId, appSecret, domain: finalDomain, openId } = outcome.result;
 console.log("[成功] App ID:", appId, "| 域:", finalDomain, "| owner:", openId ?? "(无)");
-fs.writeFileSync("/tmp/feishu-creds.json", JSON.stringify({ appId, appSecret, domain: finalDomain, openId: openId ?? null }), { mode: 0o600 });
-console.log("凭证已写入 /tmp/feishu-creds.json");
+fs.writeFileSync(CREDS, JSON.stringify({ appId, appSecret, domain: finalDomain, openId: openId ?? null }), { mode: 0o600 });
+console.log("凭证已写入", CREDS);
 ```
 
 ### 5.3 后台运行脚本并把二维码弹给用户
+
+**macOS / Linux:**
 
 ```bash
 node /tmp/feishu-scan.mjs
 ```
 
-- 用**后台任务**跑（它要轮询等扫码，最长 10 分钟）。
-- 脚本会生成 `/tmp/feishu-qr.png` 并尝试 `open` 自动弹出图片窗口。
-- **引导用户**：手机飞书 App → 右上「+」→「扫一扫」→ 扫这张图 → **点同意授权**。
-- 二维码 10 分钟有效。Lark（海外版）用户：运行前 `export FEISHU_DOMAIN=lark`（脚本也会在轮询时自动识别 `tenant_brand=lark` 并切域）。
+**Windows (PowerShell):**
 
-校验门：脚本退出码 0，输出 `[成功] App ID: cli_xxx`，且 `/tmp/feishu-creds.json` 存在。
+```powershell
+node "$env:TEMP\feishu-scan.mjs"
+```
+
+- 用**后台任务**跑（它要轮询等扫码，最长 10 分钟）。
+- 脚本会在临时目录生成 `feishu-qr.png` 并按平台自动弹出图片窗口（macOS `open` / Windows `start` / Linux `xdg-open`）。
+- **引导用户**：手机飞书 App → 右上「+」→「扫一扫」→ 扫这张图 → **点同意授权**。图没弹出时，把脚本打印的「二维码链接」发给用户，让其浏览器打开后手机扫屏。
+- 二维码 10 分钟有效。Lark（海外版）用户：运行前设 `FEISHU_DOMAIN=lark`（macOS / Linux `export FEISHU_DOMAIN=lark`；Windows `$env:FEISHU_DOMAIN="lark"`），脚本也会在轮询时自动识别 `tenant_brand=lark` 并切域。
+
+校验门：脚本退出码 0，输出 `[成功] App ID: cli_xxx`，且临时目录下 `feishu-creds.json` 存在。
 失败（`access_denied` / `expired` / `timeout`）就重跑脚本生成新码，或回退第 5 步附录手动方案。
 
 ### 5.4 写入凭证（不要把 secret 回显到终端）
+
+**macOS / Linux:**
 
 ```bash
 CREDS=/tmp/feishu-creds.json
@@ -246,6 +321,21 @@ openclaw config set channels.feishu.dmPolicy "pairing" >/dev/null && echo "✓ d
 openclaw gateway restart
 # 用完即清，凭证只留在 openclaw 配置里
 rm -f /tmp/feishu-creds.json /tmp/feishu-qr.png /tmp/feishu-scan.mjs
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$Creds = Get-Content "$env:TEMP\feishu-creds.json" -Raw | ConvertFrom-Json
+openclaw config set channels.feishu.accounts.default.appId     $Creds.appId     | Out-Null
+openclaw config set channels.feishu.accounts.default.appSecret $Creds.appSecret | Out-Null
+openclaw config set channels.feishu.domain  $Creds.domain | Out-Null
+openclaw config set channels.feishu.enabled true          | Out-Null
+openclaw config set channels.feishu.dmPolicy "pairing"    | Out-Null
+
+openclaw gateway restart
+# 用完即清，凭证只留在 openclaw 配置里
+Remove-Item "$env:TEMP\feishu-creds.json","$env:TEMP\feishu-qr.png","$env:TEMP\feishu-scan.mjs" -ErrorAction SilentlyContinue
 ```
 
 校验门：`openclaw channels status --channel feishu --probe` 显示飞书 `enabled, configured, running, works`。
@@ -268,9 +358,19 @@ rm -f /tmp/feishu-creds.json /tmp/feishu-qr.png /tmp/feishu-scan.mjs
 
 安全增强（可选）：不想把 App Secret 明文存进 `openclaw.json`，可改用环境变量引用：
 
+**macOS / Linux:**
+
 ```bash
 export FEISHU_APP_SECRET="<APP_SECRET>"
 openclaw config set channels.feishu.accounts.default.appSecret \
+  --ref-provider default --ref-source env --ref-id FEISHU_APP_SECRET
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:FEISHU_APP_SECRET = "<APP_SECRET>"
+openclaw config set channels.feishu.accounts.default.appSecret `
   --ref-provider default --ref-source env --ref-id FEISHU_APP_SECRET
 ```
 
@@ -298,7 +398,8 @@ openclaw pairing approve feishu <CODE>
 
 ```bash
 openclaw logs --follow
-# 或直接跟文件：tail -f /tmp/openclaw/openclaw-*.log
+# 备选（macOS / Linux）：tail -f /tmp/openclaw/openclaw-*.log
+# Windows 无 tail，直接用上面的 openclaw logs --follow
 ```
 
 让用户在飞书里再发一条消息，你确认日志依次出现（这是实测打通时的真实标志，扫码 PersonalAgent 应用走 WebSocket 长连接，不会有 webhook 的 `im.message.receive_v1` HTTP 回调字样）：
@@ -336,19 +437,6 @@ openclaw gateway restart
 **模型不回话**：回到第 3 步，先 `openclaw infer model run --model "qqqrouter/gpt-5.5" --prompt "OK"` 探活；必要时把 `models.providers.qqqrouter.api` 在 `openai-responses` / `openai` 间切换并 `openclaw gateway restart`。中转站偶发 `Upstream service temporarily unavailable` 多为上游抖动，稍等重发即可。
 
 **App Secret 泄露**：扫码方案在开放平台或飞书 App 内重置/删除该应用后重新扫码注册；手动方案在开放平台重置 Secret → `openclaw config set channels.feishu.accounts.default.appSecret "<新值>"` → `openclaw gateway restart`。
-
----
-
-## Windows 备注
-
-第 1 步改用 PowerShell：
-
-```powershell
-iwr -useb https://openclaw.ai/install.ps1 | iex
-```
-
-其余命令一致；环境变量用 `setx RELAY_API_KEY "sk-..."`（新开终端生效）或当前会话 `$env:RELAY_API_KEY="sk-..."`。
-第 5 步扫码脚本里的 `open`（macOS 打开图片）在 Windows 上换成 `start ""`，或直接把脚本打印的「二维码链接」发给用户、让其在浏览器打开后用手机飞书扫屏。
 
 ---
 
