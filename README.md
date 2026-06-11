@@ -19,11 +19,20 @@
 
 OpenClaw 网关 + 中转站模型 + 飞书。需要环境变量 `RELAY_API_KEY`。
 
+**先在终端 export，再在同一终端启动 Claude Code**（这样 key 被 claude 继承；Claude Code 跨命令不保留 env，不能让它自己 export）：
+
+```bash
+export RELAY_API_KEY=sk-你的通用key
+claude
+```
+
+再把这段发给 Claude Code：
+
 ```text
-请按以下步骤帮我装好 OpenClaw，全程用中文跟我沟通：
-1. 终端执行：export RELAY_API_KEY=sk-你的通用key
-2. 终端执行：curl -fsSL https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/openclaw/setup.md -o setup.md
-3. 读取 setup.md，严格按里面的步骤逐步执行，每步先校验，需要我操作时再叫我。
+请帮我装好 OpenClaw，全程用中文沟通：
+1. 先执行 printf '%s\n' "${RELAY_API_KEY:+set}" 确认能读到 RELAY_API_KEY（应输出 set）；为空就停下让我先 export 再重启你。
+2. 执行：curl -fsSL https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/openclaw/setup.md -o setup.md
+3. 读取 setup.md，严格按步骤逐步执行，每步先校验，需要我操作时再叫我。
 ```
 
 ## 新增一个应用
