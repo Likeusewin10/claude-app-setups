@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "rawBase": "https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main",
+  "apps": [
+    {
+      "id": "openclaw",
+      "name": "OpenClaw",
+      "description": "OpenClaw 网关 + 中转站(qqqrouter)模型 gpt-5.5 + 飞书接入",
+      "setup": "apps/openclaw/setup.md",
+      "requiredEnv": ["RELAY_API_KEY"],
+      "platforms": ["macos", "linux", "windows"]
+    }
+  ]
+}
