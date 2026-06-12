@@ -13,18 +13,28 @@
 飞书 wiki 页面做“落地页”，放下面这段**引导语**让新手复制。
 **关键**：第 1 步由用户在终端执行、并在同一终端启动 Claude Code，env 才能被继承（Claude Code 跨命令不保留 env，不能让它自己 export）。
 
-终端先执行（macOS / Linux）：
+终端先执行 —— **macOS / Linux:**
 
 ```bash
 export RELAY_API_KEY=sk-你的通用key
 claude
 ```
 
-再发给 Claude Code：
+**Windows (PowerShell):**
+
+```powershell
+$env:RELAY_API_KEY="sk-你的通用key"
+claude
+```
+
+再发给 Claude Code（两平台通用，Claude Code 会按探测到的平台选对应命令）：
 
 ```text
 请帮我装好 Hermes，全程用中文沟通：
-1. 先执行 printf '%s\n' "${RELAY_API_KEY:+set}" 确认能读到 RELAY_API_KEY（应输出 set）；为空就停下让我先 export 再重启你。
+1. 先确认能读到 RELAY_API_KEY（应输出 set）：
+   - macOS / Linux: printf '%s\n' "${RELAY_API_KEY:+set}"
+   - Windows (PowerShell): if ($env:RELAY_API_KEY) { "set" } else { "EMPTY" }
+   为空就停下让我先设好 env 再重启你。
 2. 执行：curl -fsSL https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/hermes/setup.md -o setup.md
 3. 读取 setup.md，严格按步骤逐步执行，每步先校验，需要我操作时再叫我。
 ```
@@ -37,10 +47,11 @@ claude
 ## 给 Claude Code：执行总则
 
 - 你的目标：把 Hermes 装好、用中转站配好模型、接入飞书、最后**自我验证打通**。
-- 平台假设 macOS。Windows 见末尾「Windows 备注」（命令略有不同，先看那一节）。
+- **第 0 步先探测操作系统**，之后凡命令给出 `macOS / Linux:` 与 `Windows (PowerShell):` 两版的，按探测结果选对应那版；只写一份的（纯 `hermes` 子命令）两平台通用。
+- **Windows 上的混合环境要特别注意**：Claude Code 的 shell 常常是 **Git-Bash / MINGW64**（有 `bash`/`find`/`/tmp`），但 Hermes 由 `install.ps1` 装进**原生 Windows 用户 PATH**。这种情况下，在 bash 里直接敲 `hermes` 会 `command not found`——**所有 `hermes` 命令都要用 `powershell.exe -NoProfile -Command "hermes ..."` 包一层调用**。只有在真正的 WSL2 里（`uname` 为 Linux）才按 macOS / Linux 版直接跑。不要在 PowerShell 里照搬 bash 的 `${VAR:+set}`、`$(...)`、`find`、`/tmp`。
 - **逐步执行，每步带校验门**：校验不过不要进入下一步，先看 `hermes logs --follow` / `hermes doctor` 排查并把结论告诉用户。
 - 只有以下环节需要**用户本人**操作，到时停下来清楚地引导他：在飞书开放平台建应用 / 授权 / 发布 / 把机器人拉进群 / 在飞书里发测试消息。其余命令你自己跑。
-- 先确认 `RELAY_API_KEY` 已设置：`printf '%s' "${RELAY_API_KEY:+set}"`（应输出 `set`）。若为空，**停下**让用户在终端 `export RELAY_API_KEY=sk-...` 后**重启 Claude Code**（env 不跨命令保留，你自己 export 无效）。
+- 先确认 `RELAY_API_KEY` 已设置 —— **macOS / Linux:** `printf '%s\n' "${RELAY_API_KEY:+set}"`（应输出 `set`）；**Windows (PowerShell):** `if ($env:RELAY_API_KEY) { "set" } else { "EMPTY" }`。若为空，**停下**让用户在终端设好后**重启 Claude Code**（env 不跨命令保留，你自己设无效）——macOS / Linux 用 `export RELAY_API_KEY=sk-...`；Windows 当前会话用 `$env:RELAY_API_KEY="sk-..."`，持久化用 `setx RELAY_API_KEY "sk-..."`（新开终端才生效）。
 
 中转站参数（本 playbook 默认值）：
 
@@ -49,12 +60,23 @@ claude
 | base_url | `https://console.qqqrouter.ai/v1` |
 | 模型 | `gpt-5.5` |
 | provider 名 | `custom` |
-| API 格式 | `chat_completions`（默认）；失败再切 `codex_responses` |
+| API 格式 | 先试默认 `chat_completions`；该中转站的 `gpt-5.5` 实测走 `codex_responses` 更稳（见第 3 步） |
 | key | 读环境变量 `RELAY_API_KEY` |
 
 ---
 
-## 第 0 步 · 环境预检
+## 第 0 步 · 环境预检（含操作系统判定）
+
+先判定操作系统（决定后续遇到分平台命令时选哪版），再看依赖版本：
+
+```bash
+node -e "console.log('platform=' + process.platform)"   # darwin=macOS / linux / win32=Windows
+```
+
+- `platform=win32` → 后续选 **Windows (PowerShell)** 版命令，且 `hermes` 命令用 `powershell.exe -NoProfile -Command "hermes ..."` 调用（除非用户在真正的 WSL2 里，`uname` 为 Linux，则按 macOS / Linux 版）。`darwin` / `linux` → 选 **macOS / Linux** 版。
+- 若 `node` 不存在，用 `python3 --version` 或直接看 `uname` 判定；判不出就问用户。
+
+再看版本（缺了不阻塞，安装脚本会补依赖）：
 
 ```bash
 python3 --version
@@ -64,17 +86,25 @@ node --version
 - Hermes 需要 Python ≥ 3.11；安装脚本会用 `uv` 自动补齐 Python，没装也没关系。
 - Node 非必需（部分工具用得到），缺了不阻塞。
 
-校验门：能打印版本即可继续；命令不存在也继续（安装脚本会补依赖）。
+校验门：记下平台即可继续；版本命令不存在也继续（安装脚本会补依赖）。
 
 ---
 
 ## 第 1 步 · 一键安装 Hermes
 
+**macOS / Linux:**
+
 ```bash
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
 
-装完刷新 PATH 并校验：
+**Windows (PowerShell):** 原生安装（含便携 Git Bash，无需管理员）：
+
+```powershell
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+```
+
+装完刷新 PATH 并校验 —— **macOS / Linux:**
 
 ```bash
 hash -r 2>/dev/null || true
@@ -82,8 +112,15 @@ export PATH="$HOME/.local/bin:$PATH"
 hermes --version
 ```
 
+**Windows (PowerShell):** 无需 `hash -r` / `export PATH`，**新开一个终端窗口**后（PATH 才会刷新）：
+
+```powershell
+hermes --version
+```
+
 校验门：`hermes --version` 打印出版本号。
-若提示 `command not found`：让用户 `source ~/.zshrc`（或 `~/.bashrc`）后重试，或**新开一个终端窗口**再试（PATH 未刷新）。安装器把 `hermes` 软链到 `~/.local/bin/hermes`。
+- **macOS / Linux** 若提示 `command not found`：`source ~/.zshrc`（或 `~/.bashrc`）后重试，或新开终端窗口。安装器把 `hermes` 软链到 `~/.local/bin/hermes`。
+- **Windows** 若提示「不是内部或外部命令」：新开终端窗口刷新 PATH 再试。注意若 Claude Code 的 shell 是 Git-Bash，安装后 bash 里直接敲 `hermes` 多半找不到，需改用 `powershell.exe -NoProfile -Command "hermes --version"` 验证（见执行总则的混合环境说明）。
 
 ---
 
@@ -91,11 +128,22 @@ hermes --version
 
 > ⚠️ 不要跑 `hermes model` / `hermes setup` —— 那是 curses 交互向导，在你（非 TTY）环境里会卡死。**只用 `hermes config set`**。
 
+**macOS / Linux:**
+
 ```bash
 hermes config set model.provider custom
 hermes config set model.base_url "https://console.qqqrouter.ai/v1"
 hermes config set model.default "gpt-5.5"
 hermes config set OPENAI_API_KEY "$RELAY_API_KEY"
+```
+
+**Windows (PowerShell):** 环境变量是 `$env:RELAY_API_KEY`（不是 `$RELAY_API_KEY`）；混合环境下每条都经 `powershell.exe -NoProfile -Command "..."` 调用：
+
+```powershell
+hermes config set model.provider custom
+hermes config set model.base_url "https://console.qqqrouter.ai/v1"
+hermes config set model.default "gpt-5.5"
+hermes config set OPENAI_API_KEY "$env:RELAY_API_KEY"
 ```
 
 说明：
@@ -122,19 +170,22 @@ hermes -z "只回复两个字：OK"
 ```
 
 > `hermes -z` 是 oneshot 模式：发一条 prompt、打印末尾结果块、退出。若参数报错先跑 `hermes -z --help` 看实际用法。
+> 探活首次执行可能较慢（冷启动 + 上游延迟），给它 30-60s，不要急着判失败。
 
 校验门：模型返回了文本（例如 `OK`）。
 
-**如果探活失败，且报与接口路径 / 格式有关的错**（如 4xx、`chat/completions` 不支持、`responses` 相关），把格式切到 codex-responses 再探活：
+**如果探活失败，且报与接口路径 / 格式有关的错**（如 4xx、`chat/completions` 不支持、`responses` 相关，或 `Upstream service temporarily unavailable`），把格式切到 codex-responses 再探活：
 
 ```bash
 hermes config set model.api_mode "codex_responses"
 hermes -z "只回复两个字：OK"
 ```
 
+> 实测经验：该中转站的 `gpt-5.5` 走普通 `chat/completions` 容易报 `Upstream service temporarily unavailable`，切到 `codex_responses` 后更稳。若默认 `chat_completions` 第一次就失败，优先按上面切 responses，再继续往下排查。
+
 仍失败的排查顺序：
 1. `RELAY_API_KEY` 是否有效、是否真被读到（`printf '%s' "${RELAY_API_KEY:+set}"` 应为 `set`）。
-2. `https://console.qqqrouter.ai/v1` 是否可达（`curl -sS -o /dev/null -w '%{http_code}' https://console.qqqrouter.ai/v1`）。
+2. `https://console.qqqrouter.ai/v1` 是否可达（`curl -sS -o /dev/null -w '%{http_code}' https://console.qqqrouter.ai/v1`；Windows PowerShell 下把 `-o /dev/null` 改成 `-o NUL`）。
 3. 模型名 `gpt-5.5` 在中转站是否存在。
 4. 跑 `hermes doctor` 看连通性检查里模型这项的结论。
 
@@ -161,8 +212,11 @@ hermes -z "只回复两个字：OK"
 拿到凭证后，写入 `~/.hermes/.env`（把 `<APP_ID>` / `<APP_SECRET>` 换成用户给的值）。
 飞书各项配置 hermes 网关都从环境变量读（`gateway/config.py`），所以直接落到 `.env`。
 
+> 下列 `FEISHU_*` 变量名为本 playbook 撰写时的实测值；若 Hermes 版本升级后写入了却不生效，以 `hermes gateway --help` 和官方「环境变量参考」文档为准核对名称。
+
 > ⚠️ 不要用 `hermes config set FEISHU_APP_ID ...`：`hermes config set` 只对 `*_API_KEY` / `*_TOKEN` 等后缀自动落 `.env`，`FEISHU_APP_ID` / `FEISHU_APP_SECRET` 这类会被错误写进 yaml、网关读不到。
-> 用下面的方式**直接、幂等地写入 `~/.hermes/.env`**（已存在则替换该行）：
+
+**macOS / Linux:** 用下面的方式**直接、幂等地写入 `~/.hermes/.env`**（已存在则替换该行）：
 
 ```bash
 ENV_FILE="${HERMES_HOME:-$HOME/.hermes}/.env"
@@ -173,6 +227,7 @@ set_env () {  # set_env KEY VALUE —— 幂等写入，不回显 value
   if grep -q "^${k}=" "$ENV_FILE" 2>/dev/null; then
     # 用 awk 替换，避免 sed 分隔符被 value 里的字符干扰
     awk -v k="$k" -v v="$v" 'BEGIN{FS=OFS="="} $1==k{$0=k"="v; done=1} {print} END{if(!done) print k"="v}' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+    chmod 600 "$ENV_FILE"   # mv 进来的新文件不继承旧权限，重设回 600
   else
     printf '%s=%s\n' "$k" "$v" >> "$ENV_FILE"
   fi
@@ -187,12 +242,43 @@ set_env FEISHU_GROUP_POLICY    "open"          # 群里 @机器人 才回应；d
 chmod 600 "$ENV_FILE"
 ```
 
+**Windows (PowerShell):** 用 PowerShell 把这几行**幂等**写入 `%USERPROFILE%\.hermes\.env`（同名行替换，否则追加），不回显 secret：
+
+```powershell
+$EnvFile = Join-Path $env:USERPROFILE ".hermes\.env"
+New-Item -ItemType Directory -Force -Path (Split-Path $EnvFile) | Out-Null
+if (-not (Test-Path $EnvFile)) { New-Item -ItemType File -Path $EnvFile | Out-Null }
+
+function Set-EnvLine([string]$k, [string]$v) {  # 幂等：有同名行就替换，否则追加
+  $lines = @(Get-Content $EnvFile -ErrorAction SilentlyContinue)
+  $out = [System.Collections.Generic.List[string]]::new()
+  $hit = $false
+  foreach ($ln in $lines) {
+    if ($ln -match "^$([regex]::Escape($k))=") { $hit = $true; $out.Add("$k=$v") }
+    else { $out.Add($ln) }
+  }
+  if (-not $hit) { $out.Add("$k=$v") }
+  # 必须无 BOM：Windows PowerShell 5.1 的 `-Encoding utf8` 会写 BOM，
+  # 导致 .env 第一行 key 被 Python 读成 ﻿FEISHU_APP_ID、凭证静默失效。
+  [System.IO.File]::WriteAllLines($EnvFile, $out, [System.Text.UTF8Encoding]::new($false))
+}
+
+Set-EnvLine "FEISHU_APP_ID"          "<APP_ID>"
+Set-EnvLine "FEISHU_APP_SECRET"      "<APP_SECRET>"
+Set-EnvLine "FEISHU_DOMAIN"          "feishu"      # 国际版 Lark 改成 lark
+Set-EnvLine "FEISHU_CONNECTION_MODE" "websocket"   # 长连接，无需公网地址
+Set-EnvLine "FEISHU_ALLOW_ALL_USERS" "false"       # false = 启用 DM 配对审批（新手自测推荐）
+Set-EnvLine "FEISHU_GROUP_POLICY"    "open"        # 群里 @机器人 才回应；disabled 可关群聊
+```
+
 把网关装成后台服务并启动：
 
 ```bash
 hermes gateway install   # 装常驻服务（macOS launchd / Linux systemd）
 hermes gateway start
 ```
+
+> Windows 混合环境下同样经 `powershell.exe -NoProfile -Command "hermes gateway install"` / `"hermes gateway start"` 调用。`hermes gateway status` / `restart` / `logs` 等也一样。
 
 校验门：
 
@@ -229,12 +315,14 @@ hermes pairing approve <CODE>
 hermes logs --follow
 ```
 
+> 注意：网关重启期间日志流会短暂断开，`hermes logs --follow` 可能因此退出，属正常现象（不代表失败）。可改用非跟随的 `hermes logs`（读最近若干行）配合「机器人是否真回话」来判断，不必死守 `--follow`。
+
 让用户在飞书里再发一条消息，你确认：
 
 - 日志出现入站事件 `im.message.receive_v1`；
 - 机器人**在飞书里回复了**，且内容来自中转站模型 `gpt-5.5`。
 
-满足即**全部打通**，向用户报告成功，并给出常用指令：飞书里直接发文本 `/status`、`/model`、`/reset`（飞书不支持斜杠菜单，发纯文本即可）。
+**最终判据以「机器人在飞书里真的回了话」为准**——这是最可靠的打通标志，日志只是辅助。满足即**全部打通**，向用户报告成功，并给出常用指令：飞书里直接发文本 `/status`、`/model`、`/reset`（飞书不支持斜杠菜单，发纯文本即可）。
 
 群聊补充：若要在群里用，引导用户**把机器人拉进群**并 **@机器人**（`FEISHU_GROUP_POLICY=open` 默认需要 @）。要关闭群聊则把它设为 `disabled` 并 `hermes gateway restart`。
 
@@ -261,34 +349,15 @@ hermes -z "只回复两个字：OK"
 
 改了配置后让网关生效：`hermes gateway restart`。
 
-App Secret 泄露：在开放平台重置 Secret → 用第 5 步的 `set_env FEISHU_APP_SECRET "<新值>"` 覆写 → `hermes gateway restart`。
+App Secret 泄露：在开放平台重置 Secret → 用第 5 步的写入方式覆写 `FEISHU_APP_SECRET` → `hermes gateway restart`。
 
 ---
 
-## Windows 备注
+## 平台说明
 
-第 1 步改用 PowerShell（原生安装，含便携 Git Bash，无需管理员）：
-
-```powershell
-iex (irm https://hermes-agent.nousresearch.com/install.ps1)
-```
-
-环境变量：当前会话用 `$env:RELAY_API_KEY="sk-..."`；要持久化用 `setx RELAY_API_KEY "sk-..."`（**新开终端才生效**）。
-**关键**：和 macOS 一样，必须在**设好 env 的同一个 PowerShell 窗口里启动 `claude`**，env 才能被继承。
-
-其余 `hermes config set` / `hermes -z` / `hermes gateway ...` / `hermes pairing ...` / `hermes logs` 命令与 macOS 一致。
-写 `.env` 的那段 bash 脚本在 Windows 上请改为：让 Claude Code 用 PowerShell 把这几行**幂等**写入 `%USERPROFILE%\.hermes\.env`（同名行替换，否则追加）：
-
-```text
-FEISHU_APP_ID=<APP_ID>
-FEISHU_APP_SECRET=<APP_SECRET>
-FEISHU_DOMAIN=feishu
-FEISHU_CONNECTION_MODE=websocket
-FEISHU_ALLOW_ALL_USERS=false
-FEISHU_GROUP_POLICY=open
-```
-
-Windows 原生唯一缺的功能是浏览器版 dashboard 聊天窗（需要 WSL2）；CLI、网关、飞书都原生可用。
+- 分平台命令已内联到各步骤（`macOS / Linux:` 与 `Windows (PowerShell):` 两版），按第 0 步探测到的平台选对应版本。
+- **Windows 混合环境**：Claude Code 的 shell 若是 Git-Bash / MINGW64，而 Hermes 由 `install.ps1` 装在原生 Windows PATH，则所有 `hermes` 命令要用 `powershell.exe -NoProfile -Command "hermes ..."` 调用（详见执行总则）。
+- Windows 原生唯一缺的功能是浏览器版 dashboard 聊天窗（需要 WSL2）；CLI、网关、飞书都原生可用。
 
 ---
 
