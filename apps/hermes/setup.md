@@ -50,6 +50,7 @@ claude
 - **第 0 步先探测操作系统**，之后凡命令给出 `macOS / Linux:` 与 `Windows (PowerShell):` 两版的，按探测结果选对应那版；只写一份的（纯 `hermes` 子命令）两平台通用。
 - **Windows 上的混合环境要特别注意**：Claude Code 的 shell 常常是 **Git-Bash / MINGW64**（有 `bash`/`find`/`/tmp`），但 Hermes 由 `install.ps1` 装进**原生 Windows 用户 PATH**。这种情况下，在 bash 里直接敲 `hermes` 会 `command not found`——**所有 `hermes` 命令都要用 `powershell.exe -NoProfile -Command "hermes ..."` 包一层调用**。只有在真正的 WSL2 里（`uname` 为 Linux）才按 macOS / Linux 版直接跑。不要在 PowerShell 里照搬 bash 的 `${VAR:+set}`、`$(...)`、`find`、`/tmp`。
 - **逐步执行，每步带校验门**：校验不过不要进入下一步，先看 `hermes logs --follow` / `hermes doctor` 排查并把结论告诉用户。
+- **本地有源码先读源码**：当你能访问到 Hermes 源码时，对「某功能是否支持 / 某命令叫什么 / 某变量名是什么」的判断**以源码为准**，不要拿本文档或第三方说法当事实依据下结论。例如飞书的扫码 device-code 注册流程（`gateway/platforms/feishu.py` 里的 `qr_register`）就是源码里实打实有的，仅看文档容易误判为「不支持」。文档可能滞后于版本，命令存疑时跑 `--help` 看实际子命令。
 - 只有以下环节需要**用户本人**操作，到时停下来清楚地引导他：在飞书开放平台建应用 / 授权 / 发布 / 把机器人拉进群 / 在飞书里发测试消息。其余命令你自己跑。
 - 先确认 `RELAY_API_KEY` 已设置 —— **macOS / Linux:** `printf '%s\n' "${RELAY_API_KEY:+set}"`（应输出 `set`）；**Windows (PowerShell):** `if ($env:RELAY_API_KEY) { "set" } else { "EMPTY" }`。若为空，**停下**让用户在终端设好后**重启 Claude Code**（env 不跨命令保留，你自己设无效）——macOS / Linux 用 `export RELAY_API_KEY=sk-...`；Windows 当前会话用 `$env:RELAY_API_KEY="sk-..."`，持久化用 `setx RELAY_API_KEY "sk-..."`（新开终端才生效）。
 
@@ -127,6 +128,8 @@ hermes --version
 ## 第 2 步 · 非交互配自定义模型（中转站 qqqrouter，模型 gpt-5.5）
 
 > ⚠️ 不要跑 `hermes model` / `hermes setup` —— 那是 curses 交互向导，在你（非 TTY）环境里会卡死。**只用 `hermes config set`**。
+>
+> 同理，飞书若想用**扫码 device-code 注册**（源码确实支持，见 `gateway/platforms/feishu.py` 的 `qr_register`，别误判为不支持），它的菜单也是 curses 向导、非 TTY 会卡死。绕过办法是直接调底层函数 `_begin_registration` / `_poll_registration`，不要走菜单。本 playbook 默认走第 4–5 步的 App ID/Secret + 长连接方案，无需扫码；这里仅说明非 TTY 下「向导一律绕开、直调底层」的通用原则。
 
 **macOS / Linux:**
 
@@ -154,10 +157,14 @@ hermes config set OPENAI_API_KEY "$env:RELAY_API_KEY"
 校验门：
 
 ```bash
-hermes config get model.provider   # custom
-hermes config get model.base_url   # https://console.qqqrouter.ai/v1
-hermes config get model.default    # gpt-5.5
+hermes config show   # 打印当前配置，逐项核对下面三个值
 ```
+
+- `model.provider` = `custom`
+- `model.base_url` = `https://console.qqqrouter.ai/v1`
+- `model.default` = `gpt-5.5`
+
+> ⚠️ 不要用 `hermes config get <key>`：部分版本（实测 v0.16.0）**没有** `get` 子命令，会报 `invalid choice: 'get'`。统一用 `hermes config show` 看全量配置。命令报「无效选择」时先怀疑文档与实际版本不符，跑 `hermes config --help` 看真实子命令。
 
 三个值都对即可继续。
 
@@ -271,6 +278,42 @@ Set-EnvLine "FEISHU_ALLOW_ALL_USERS" "false"       # false = 启用 DM 配对审
 Set-EnvLine "FEISHU_GROUP_POLICY"    "open"        # 群里 @机器人 才回应；disabled 可关群聊
 ```
 
+### 5.1 · 确保飞书可选依赖装好（关键、最隐蔽的坑）
+
+Hermes 的基础安装**不含飞书依赖**：`lark-oapi` 是可选 extra，设计为运行时按需 lazy-install。只有走交互向导（`hermes model` / `hermes gateway setup`）时，向导才会触发这个 lazy-install 副作用。我们前面为了非 TTY 全程绕开了向导、直接写配置，所以**这个副作用没发生**——结果会是凭证齐全、`platform.feishu` 也被登记成 active feature，但 venv 里其实没装包，处于「登记了却没装」的不一致状态。典型现象：
+
+- 日志出现 `Feishu: lark-oapi not installed`
+- `No adapter available for feishu`
+
+**正确修复是走 Hermes 自带的 lazy-install 机制，而不是裸 `pip install`**（裸装容易版本漂移：官方 extra 钉死 `lark-oapi==1.5.3` + `qrcode==7.4.2`，而随手 `pip install qrcode` 会装到连 `__version__` 都没有的最新版）。用 `tools/lazy_deps.ensure` 一步装齐钉死版本并登记 feature：
+
+**macOS / Linux:**
+
+```bash
+hermes exec python -c "from tools import lazy_deps; lazy_deps.ensure('platform.feishu', prompt=False)"
+```
+
+**Windows (PowerShell):**（混合环境同样经 `powershell.exe -NoProfile -Command "..."` 调用）
+
+```powershell
+hermes exec python -c "from tools import lazy_deps; lazy_deps.ensure('platform.feishu', prompt=False)"
+```
+
+> `prompt=False` 让它在非 TTY 环境里不弹交互直接装。`ensure` 会自动对齐到项目钉死的版本（`lark-oapi==1.5.3` + `qrcode==7.4.2`），**别图省事用裸 `pip install`**——装依赖跟着项目的 pin 走。
+> 若 `hermes exec python ...` 在你的版本里不可用，跑 `hermes --help` 找等价的「在 Hermes 环境里执行 Python」入口；核心是让 `tools.lazy_deps.ensure('platform.feishu', prompt=False)` 在 **Hermes 自己的 venv** 里跑到，而不是系统 Python。
+
+> ⚠️ **GBK 解码报错是虚惊，不是装失败**：中文 Windows 下 pip 子进程的输出可能让 reader 线程抛 `UnicodeDecodeError: 'gbk' codec ...`。这只是输出层用 GBK 解码 pip 日志失败，**不影响实际安装**。判定是否成功以「`ensure` 之后能否正常 `import lark_oapi`」为准，别被编码错误误判成安装失败。
+
+校验门（确认包真的可导入）：
+
+```bash
+hermes exec python -c "import lark_oapi, qrcode; print('feishu deps OK', lark_oapi.__name__)"
+```
+
+打印 `feishu deps OK` 即可继续。
+
+### 5.2 · 启动网关
+
 把网关装成后台服务并启动：
 
 ```bash
@@ -279,6 +322,17 @@ hermes gateway start
 ```
 
 > Windows 混合环境下同样经 `powershell.exe -NoProfile -Command "hermes gateway install"` / `"hermes gateway start"` 调用。`hermes gateway status` / `restart` / `logs` 等也一样。
+>
+> ⚠️ **`hermes gateway install` 有两个连续的 Y/n 交互提问**（先问「是否立即启动」，再问「是否开机自启」）。只喂单个 `'Y'` 只够答第一个，第二个会吃到 EOF 而失败。非交互环境要一次喂两行 `Y`，并让 `hermes` 继承到这股 stdin：
+>
+> **macOS / Linux:**
+> ```bash
+> printf 'Y\nY\n' | hermes gateway install --force
+> ```
+> **Windows (PowerShell，混合环境)：** 把 `printf` 的两行 `Y` 通过管道喂给 powershell，让其中的 `hermes` 继承这条 stdin：
+> ```bash
+> printf 'Y\nY\n' | powershell.exe -NoProfile -Command "hermes gateway install --force"
+> ```
 
 校验门：
 
@@ -338,6 +392,8 @@ hermes logs --follow
 5. 网关在跑：`hermes gateway status`；
 6. 看日志：`hermes logs --follow`；
 7. 整体体检：`hermes doctor`。
+
+日志报 `lark-oapi not installed` / `No adapter available for feishu`：飞书可选依赖没装（基础安装不含）。回到 **第 5.1 步** 用 `tools/lazy_deps.ensure('platform.feishu', prompt=False)` 装齐钉死版本（`lark-oapi==1.5.3` + `qrcode==7.4.2`），**别用裸 `pip install`**，然后 `hermes gateway restart`。中文 Windows 下若装包过程冒出 `gbk codec` 解码错误，那是输出层虚惊、不影响安装，以 `import lark_oapi` 是否成功为准。
 
 模型不回话：回到第 3 步，先 `hermes -z` 探活；必要时在 `chat_completions` ↔ `codex_responses` 间切 `model.api_mode`：
 
