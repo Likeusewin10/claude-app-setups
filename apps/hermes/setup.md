@@ -51,7 +51,8 @@ claude
 - **Windows 上的混合环境要特别注意**：Claude Code 的 shell 常常是 **Git-Bash / MINGW64**（有 `bash`/`find`/`/tmp`），但 Hermes 由 `install.ps1` 装进**原生 Windows 用户 PATH**。这种情况下，在 bash 里直接敲 `hermes` 会 `command not found`——**所有 `hermes` 命令都要用 `powershell.exe -NoProfile -Command "hermes ..."` 包一层调用**。只有在真正的 WSL2 里（`uname` 为 Linux）才按 macOS / Linux 版直接跑。不要在 PowerShell 里照搬 bash 的 `${VAR:+set}`、`$(...)`、`find`、`/tmp`。
 - **逐步执行，每步带校验门**：校验不过不要进入下一步，先看 `hermes logs --follow` / `hermes doctor` 排查并把结论告诉用户。
 - **本地有源码先读源码**：当你能访问到 Hermes 源码时，对「某功能是否支持 / 某命令叫什么 / 某变量名是什么」的判断**以源码为准**，不要拿本文档或第三方说法当事实依据下结论。例如飞书的扫码 device-code 注册流程（`gateway/platforms/feishu.py` 里的 `qr_register`）就是源码里实打实有的，仅看文档容易误判为「不支持」。文档可能滞后于版本，命令存疑时跑 `--help` 看实际子命令。
-- 只有以下环节需要**用户本人**操作，到时停下来清楚地引导他：在飞书开放平台建应用 / 授权 / 发布 / 把机器人拉进群 / 在飞书里发测试消息。其余命令你自己跑。
+- 只有以下环节需要**用户本人**操作，到时停下来清楚地引导他：扫码授权飞书 / 在飞书开放平台建应用（仅备用路径）/ 授权 / 发布 / 把机器人拉进群 / 在飞书里发测试消息。其余命令你自己跑。
+- **飞书配置优先级（必须遵守）**：① 先走第 4A 步的 QR 扫码自动注册；成功后直接进第 5 步启动网关，**跳过** 4B。② 仅当扫码失败、超时（>120s）、注册端点不可达时，才进入第 4B 步让用户手动提供 App ID / App Secret。**不要一上来就让用户去开放平台建应用。**
 - 先确认 `RELAY_API_KEY` 已设置 —— **macOS / Linux:** `printf '%s\n' "${RELAY_API_KEY:+set}"`（应输出 `set`）；**Windows (PowerShell):** `if ($env:RELAY_API_KEY) { "set" } else { "EMPTY" }`。若为空，**停下**让用户在终端设好后**重启 Claude Code**（env 不跨命令保留，你自己设无效）——macOS / Linux 用 `export RELAY_API_KEY=sk-...`；Windows 当前会话用 `$env:RELAY_API_KEY="sk-..."`，持久化用 `setx RELAY_API_KEY "sk-..."`（新开终端才生效）。
 
 中转站参数（本 playbook 默认值）：
@@ -129,7 +130,7 @@ hermes --version
 
 > ⚠️ 不要跑 `hermes model` / `hermes setup` —— 那是 curses 交互向导，在你（非 TTY）环境里会卡死。**只用 `hermes config set`**。
 >
-> 同理，飞书若想用**扫码 device-code 注册**（源码确实支持，见 `gateway/platforms/feishu.py` 的 `qr_register`，别误判为不支持），它的菜单也是 curses 向导、非 TTY 会卡死。绕过办法是直接调底层函数 `_begin_registration` / `_poll_registration`，不要走菜单。本 playbook 默认走第 4–5 步的 App ID/Secret + 长连接方案，无需扫码；这里仅说明非 TTY 下「向导一律绕开、直调底层」的通用原则。
+> 同理，飞书的**扫码 device-code 注册**（源码 `gateway/platforms/feishu.py` 的 `qr_register`，确实支持）的菜单也是 curses 向导，非 TTY 直接卡死。绕开向导的方式是直接调底层函数 `_begin_registration` / `_poll_registration`，第 4A 步会用到这个方法。总原则：**非 TTY 环境里所有交互向导一律绕开、直调底层**。
 
 **macOS / Linux:**
 
@@ -200,24 +201,111 @@ hermes -z "只回复两个字：OK"
 
 ---
 
-## 第 4 步 · 引导用户拿飞书应用凭证（这一步需要用户操作）
+## 第 4A 步 · 飞书扫码自动注册（优先路径）
+
+> **决策门**：先走这一步。扫码成功 → 直接跳到第 5 步（跳过 4B）。  
+> 扫码失败 / 超时（>120s）/ 注册端点不可达 → 进入第 4B 步走手动凭证。  
+> **不要一上来就让用户去开放平台建应用。**
+
+校验前置条件（三条都满足才执行，任何一条失败就改走 4B）：
+
+```bash
+# 1. 源码存在
+ls gateway/platforms/feishu.py 2>/dev/null && echo "src OK" || echo "src MISSING"
+
+# 2. 注册端点可达
+curl -sS -o /dev/null -w '%{http_code}' \
+  https://accounts.feishu.cn/oauth/v1/app/registration 2>/dev/null \
+  | grep -qE '^[234]' && echo "endpoint OK" || echo "endpoint UNREACHABLE"
+
+# 3. 能导入底层函数
+hermes exec python -c "
+from gateway.platforms.feishu import _begin_registration, _poll_registration
+print('funcs OK')
+" 2>/dev/null || echo "funcs MISSING"
+```
+
+三条全为 OK → 继续；有任何 MISSING / UNREACHABLE → 跳到第 4B 步。
+
+执行扫码注册（非交互，直调底层）：
+
+**macOS / Linux:**
+
+```bash
+hermes exec python - <<'PY'
+import time, sys
+from gateway.platforms.feishu import _begin_registration, _poll_registration
+
+reg = _begin_registration()
+print("=== 飞书扫码注册 ===")
+print("QR URL  :", reg.get("qr_url") or reg.get("url") or "（见 verification_uri）")
+print("Code    :", reg.get("user_code") or "")
+print("请在飞书 App 中扫码，或在浏览器打开上方链接后扫码授权。")
+print("等待授权（最多 120s）…")
+
+deadline = time.time() + 120
+while time.time() < deadline:
+    result = _poll_registration(reg)
+    if result and result.get("app_id"):
+        print("\n✓ 授权成功")
+        print("APP_ID    :", result["app_id"])
+        print("APP_SECRET: [已写入 .env，不回显]")
+        sys.exit(0)
+    if result and result.get("error") not in (None, "authorization_pending", "slow_down"):
+        print("✗ 注册失败:", result.get("error"))
+        sys.exit(1)
+    sys.stdout.write("."); sys.stdout.flush()
+    time.sleep(5)
+
+print("\n✗ 超时（120s），请改走手动方式（第 4B 步）")
+sys.exit(2)
+PY
+```
+
+**Windows (PowerShell，混合环境)：**
+
+```bash
+# 将上方 heredoc 内容存到临时文件，再用 hermes exec python 执行
+printf '%s\n' \
+  "import time, sys" \
+  "from gateway.platforms.feishu import _begin_registration, _poll_registration" \
+  "reg = _begin_registration()" \
+  "print('QR URL:', reg.get('qr_url') or reg.get('url') or '')" \
+  "print('Code  :', reg.get('user_code') or '')" \
+  "print('请在飞书 App 扫码，等待授权（最多 120s）…')" \
+  "deadline = __import__('time').time() + 120" \
+  "while __import__('time').time() < deadline:" \
+  "    result = _poll_registration(reg)" \
+  "    if result and result.get('app_id'): print('OK app_id=' + result['app_id']); __import__('sys').exit(0)" \
+  "    if result and result.get('error') not in (None,'authorization_pending','slow_down'): __import__('sys').exit(1)" \
+  "    __import__('time').sleep(5)" \
+  "__import__('sys').exit(2)" \
+  > /tmp/feishu_reg.py
+powershell.exe -NoProfile -Command "hermes exec python /tmp/feishu_reg.py"
+```
+
+扫码成功后，把返回的 `app_id` 和 `app_secret` 自动写入 `~/.hermes/.env`（用第 5 步的 `set_env` 函数），同时补写其余配置项，然后**直接跳到第 5.1 步**，跳过 4B。
+
+---
+
+## 第 4B 步 · 备用：手动创建飞书应用（仅在 4A 失败时执行）
 
 清楚地告诉用户去 **飞书开放平台** https://open.feishu.cn/app 完成（Lark 国际版用 https://open.larksuite.com ）：
 
 1. **创建自建应用**，记下 **App ID**（形如 `cli_xxx`）和 **App Secret**。
 2. 开启 **机器人（Bot）** 能力。
 3. **事件订阅**：添加事件 `im.message.receive_v1`；连接方式选 **长连接 / WebSocket**（不要选 webhook，免去公网回调地址）。
-4. **权限管理**：授予 IM 读写权限（如 `im:message`、`im:message:send_as_bot`，即「接收消息」「以应用身份发消息」等范围）。
+4. **权限管理**：授予 IM 读写权限（如 `im:message`、`im:message:send_as_bot`）。
 5. **创建版本并发布**，等待生效 / 审批通过。
 
-然后让用户把 **App ID** 和 **App Secret** 贴给你。**注意**：App Secret 是敏感凭证，引用时按名称称呼、不要回显原值。
+然后让用户把 **App ID** 和 **App Secret** 贴给你。App Secret 是敏感凭证，引用时按名称称呼、不要回显原值。
 
 ---
 
 ## 第 5 步 · 写入飞书凭证并启动网关（你来跑）
 
-拿到凭证后，写入 `~/.hermes/.env`（把 `<APP_ID>` / `<APP_SECRET>` 换成用户给的值）。
-飞书各项配置 hermes 网关都从环境变量读（`gateway/config.py`），所以直接落到 `.env`。
+> 若从 **第 4A 步**（扫码）成功进来：`app_id` / `app_secret` 已在 Python 脚本里拿到，在这里用 `set_env` 写入，然后补写其余配置项，继续第 5.1 步。  
+> 若从 **第 4B 步**（手动凭证）进来：把 `<APP_ID>` / `<APP_SECRET>` 替换成用户贴给你的值再执行。
 
 > 下列 `FEISHU_*` 变量名为本 playbook 撰写时的实测值；若 Hermes 版本升级后写入了却不生效，以 `hermes gateway --help` 和官方「环境变量参考」文档为准核对名称。
 
