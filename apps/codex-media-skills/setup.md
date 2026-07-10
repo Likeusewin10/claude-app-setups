@@ -53,10 +53,10 @@ https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/codex
 https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/codex-media-skills/skills/ark-video-gen/references/api.md
 ```
 
-如果 `raw.githubusercontent.com` 无法访问（国内网络常见），使用唯一认可的备用源 jsDelivr（回源 GitHub 的公共 CDN，已固定提交号 `bc5fa6f` 以避免 CDN 缓存导致新旧混版）。把上面 6 个路径中的前缀替换为：
+如果 `raw.githubusercontent.com` 无法访问（国内网络常见），使用唯一认可的备用源 jsDelivr（回源 GitHub 的公共 CDN，已固定提交号 `4ed0612` 以避免 CDN 缓存导致新旧混版）。把上面 6 个路径中的前缀替换为：
 
 ```text
-https://cdn.jsdelivr.net/gh/Likeusewin10/claude-app-setups@bc5fa6f/apps/codex-media-skills/skills/
+https://cdn.jsdelivr.net/gh/Likeusewin10/claude-app-setups@4ed0612/apps/codex-media-skills/skills/
 ```
 
 无论从哪个源下载，下方的 SHA-256 清单校验都是必选项——哈希一致才可信，与来源无关。除这两个源之外不要使用任何其他镜像。
@@ -74,7 +74,7 @@ https://cdn.jsdelivr.net/gh/Likeusewin10/claude-app-setups@bc5fa6f/apps/codex-me
 nebula-image-gen/SKILL.md                 35d340f7048550f3205d483dd66f650f9fea4e280058ebe1ccd2353ff9a7d342
 nebula-image-gen/agents/openai.yaml       43d53885874e6348e1d78b949f824f4b88618edb7c1a76c614a49184e35d1fcb
 nebula-image-gen/references/api.md         6e956b4ee1438b260229a46b88e73934ba59690b9d1245b3c6dfd42b19477bce
-ark-video-gen/SKILL.md                     e506e8d4032411105d6f3e75b81ef4e78defc2a6be22c02e57a3db4dad082d71
+ark-video-gen/SKILL.md                     e5d4d633bece4f05f21e4b6a5a580dc52105919c38ca0c452ecfb6a6b863f365
 ark-video-gen/agents/openai.yaml           7e1831557366d2b3c72efc4bbb5ceb81a83e3c38d1660060272fa1271788ef7c
 ark-video-gen/references/api.md             92dc205b2b7e71994c9aaa4f7f27a6006e4f0e0cf2b808f006dce624407de95d
 ```
@@ -158,11 +158,7 @@ $inFile = { param($name) (Test-Path $envFile) -and (Select-String -Path $envFile
 4. 回复只确认已保存并显示前 6 位掩码（如 `sk-abc***`），**绝不回显完整 Key**。
 5. 提醒用户：对话记录里留有这条 Key，若客户端支持建议删除该消息；日后怀疑泄露，去对应控制台删除并重建，再发新 Key 给我覆盖即可。
 
-**保存生视频 Key 后，顺带问一次模型 ID**（缺它视频功能同样无法使用）：
-
-> 生视频还需要一个模型 ID（只需一次）：打开 https://console.volcengine.com/ark/region:cn-beijing/openManagement → 找到你已开通的 Seedance 模型 → 复制卡片上的 Model ID（形如 `doubao-seedance-1-5-pro-251215`）发给我；也可以发 `ep-` 开头的推理接入点 ID。回复"跳过"也行，第一次生成视频时我会再问。
-
-收到后保存为 Key 文件的 `ARK_VIDEO_MODEL=<id>` 行（非秘密，可正常显示确认），同样读回校验。
+**模型 ID 不需要询问**：生视频默认使用 `doubao-seedance-2-0-260128`，skill 会自动采用；仅当用户主动提供其他 Model ID 时才保存为 Key 文件的 `ARK_VIDEO_MODEL=<id>` 行（非秘密，可正常显示确认），同样读回校验。
 
 用户回复"跳过" → 直接进入第 4 步。已是 `set` 的 Key 只说"已检测到"，不验证值、不调用收费 API。
 
@@ -183,7 +179,7 @@ $inFile = { param($name) (Test-Path $envFile) -and (Select-String -Path $envFile
 3. 确认两个 `references/api.md` 都存在。
 4. 告诉用户从下一轮对话开始，可以直接说“生成一张……”或“生成一个视频……”，Codex 会触发对应 skill。
 
-最终报告必须包含：安装目录、两个 skill 的安装结果、两个 Key 与 ARK_VIDEO_MODEL 的最终状态（`已检测到` / `本次已保存` / `用户选择跳过`）、Key 配置引导是否已完成，以及"未执行任何收费 API"。不得包含任何 Key 内容（掩码除外）。
+最终报告必须包含：安装目录、两个 skill 的安装结果、两个 Key 的最终状态（`已检测到` / `本次已保存` / `用户选择跳过`）、Key 配置引导是否已完成，以及"未执行任何收费 API"。不得包含任何 Key 内容（掩码除外）。
 
 ## 排障速查
 
