@@ -1,0 +1,4 @@
+interface:
+  display_name: "火山方舟 Seedance 生视频"
+  short_description: "使用 Seedance 创建、轮询、下载并管理异步视频任务"
+  default_prompt: "Use $ark-video-gen to create and monitor a Seedance video task through Volcengine Ark without exposing the API key."

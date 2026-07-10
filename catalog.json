@@ -9,6 +9,14 @@
       "setup": "apps/openclaw/setup.md",
       "requiredEnv": ["RELAY_API_KEY"],
       "platforms": ["macos", "linux", "windows"]
+    },
+    {
+      "id": "codex-media-skills",
+      "name": "Codex 生图 / 生视频 Skills",
+      "description": "为 Codex 安装 APINebula gpt-image-2 生图/改图与火山方舟 Seedance 生视频技能；Key 仅在实际使用时需要",
+      "setup": "apps/codex-media-skills/setup.md",
+      "requiredEnv": ["NEBULA_API_KEY", "ARK_API_KEY"],
+      "platforms": ["macos", "linux", "windows"]
     }
   ]
 }
