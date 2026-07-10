@@ -45,9 +45,10 @@ Key 的唯一存放位置是本机 Key 文件 `~/.codex/media-skills.env`（Wind
 **收到用户粘贴的 Key 后**：
 
 1. 去掉首尾空白，做形状检查（非空、单行、不含空格）；不合格就说明原因并请用户重新复制粘贴。
-2. 写入 Key 文件的 `ARK_API_KEY=<key>` 行（目录/文件不存在则创建；已有该行则整行替换；尽可能把文件权限限制为仅当前用户可读写，如 `chmod 600`）。写入命令不得让 Key 出现在 shell 历史可见的命令行参数里（优先用编程方式写文件）。
-3. 回复只确认"已保存到 ~/.codex/media-skills.env"并显示前 6 位掩码，**绝不回显完整 Key**。
-4. 提醒用户：这条对话消息里留有 Key，若客户端支持建议删除该消息；日后怀疑泄露，去控制台「API Key 管理」删除并重建，再把新 Key 发给我即可（我会覆盖旧值）。
+2. 写入 Key 文件的 `ARK_API_KEY=<key>` 行（目录/文件不存在则创建；已有该行则整行替换）。权限规则分平台：macOS/Linux 执行 `chmod 600`；**Windows 不要修改 ACL**——`%USERPROFILE%` 下默认已仅限当前用户，错误的 ACL 收紧会导致后续读取被拒、Key 被误判为未配置。写入命令不得让 Key 出现在 shell 历史可见的命令行参数里（优先用编程方式写文件）。
+3. **写入后立即读回校验**：能重新读出该行且值一致，才允许报告"已保存"；读回失败（如权限被拒）视为保存失败，先修复再继续。
+4. 回复只确认"已保存到 ~/.codex/media-skills.env"并显示前 6 位掩码，**绝不回显完整 Key**。
+5. 提醒用户：这条对话消息里留有 Key，若客户端支持建议删除该消息；日后怀疑泄露，去控制台「API Key 管理」删除并重建，再把新 Key 发给我即可（我会覆盖旧值）。
 
 **安全红线（Agent 必须遵守）**：
 
@@ -76,11 +77,19 @@ Key 的唯一存放位置是本机 Key 文件 `~/.codex/media-skills.env`（Wind
 
 ## 第 2 步：选模型与参数
 
-首次使用必须先确定可用的 `model` 或推理接入点（Endpoint）ID，不能把模型家族名或示例占位符直接提交：
+首次使用必须先确定可用的 `model` 或推理接入点（Endpoint）ID，不能把模型家族名或示例占位符直接提交。按顺序检查：
 
-1. 让用户在火山方舟控制台开通目标 Seedance 模型，并在模型/推理接入点页面复制实际 ID；不要让用户把 API Key 一并复制。
-2. 如果当前环境已设置非秘密变量 `ARK_VIDEO_MODEL`，只读取其完整 ID 用于请求；否则让用户提供实际 model/Endpoint ID，并在本次调用前确认。
-3. 拒绝 `YOUR_MODEL_OR_ENDPOINT_ID` 等占位符。提交收费任务前再次确认模型、时长、分辨率和预计成本等级。
+1. 环境变量 `ARK_VIDEO_MODEL` 是否已存在。
+2. Key 文件 `~/.codex/media-skills.env` 中是否有 `ARK_VIDEO_MODEL=` 行（随 Key 一起载入）。
+
+**两处都没有** → 把下面这段话原样发给用户，然后停止等待回答：
+
+> 还差最后一项配置：Seedance 的模型 ID（只需一次）。
+>
+> 打开 https://console.volcengine.com/ark/region:cn-beijing/openManagement → 找到你已开通的 Seedance 模型 → 复制卡片上的 Model ID（形如 `doubao-seedance-1-5-pro-251215`）发给我。
+> 如果你创建过推理接入点，也可以发 `ep-` 开头的 Endpoint ID。
+
+收到后保存为 Key 文件的 `ARK_VIDEO_MODEL=<id>` 行（非秘密，可正常显示确认），之后不再询问。拒绝 `YOUR_MODEL_OR_ENDPOINT_ID` 等占位符。提交收费任务前再次确认模型、时长、分辨率和预计成本等级。
 
 控制台：`https://console.volcengine.com/ark/region:cn-beijing/endpoint`
 
@@ -206,6 +215,6 @@ finally:
 
 ## 交付纪律
 
-1. 视频必须已下载到本地（`.mp4`）再报告完成，附文件路径、实际分辨率/时长/宽高比（从查询响应的 `resolution`/`ratio`/`duration` 字段读，adaptive 与 -1 的实际值以响应为准）。
+1. 视频必须已下载到本地（`.mp4`）再报告完成；报告前确认文件存在且大小 > 0，附**绝对路径**、实际分辨率/时长/宽高比（从查询响应的 `resolution`/`ratio`/`duration` 字段读，adaptive 与 -1 的实际值以响应为准）。输出目录：用户指定的优先；未指定时用当前工作目录（不要用系统临时目录）。
 2. 报告 `usage.completion_tokens`（计费依据；2.0 系列有最低 token 用量，不足按最低计）。
 3. 多镜头连续视频：每段设 `return_last_frame: true`，取 `content.last_frame_url` 尾帧图（同样 24h 失效，立即下载）作为下一段首帧。
