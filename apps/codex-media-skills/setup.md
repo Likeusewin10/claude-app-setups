@@ -1,11 +1,12 @@
 # 给 Codex 一键安装生图 / 生视频 Skills
 
 > 这是给 **Codex** 读取并执行的安装协议。用户只需要发送本文件的 GitHub Raw 链接；
-> 其余下载、校验和安装工作由 Codex 完成。安装过程不需要 API Key，也不得要求用户
-> 把 Key 粘贴到聊天中。
+> 其余下载、校验和安装工作由 Codex 完成。安装阶段（第 0~2 步）不需要 API Key；
+> Key 在第 3 步由用户直接粘贴到对话中，由 Codex 保存到本机 Key 文件。
 >
 > 给 Codex：用户发送本文件链接，即请求你安装下面两个 skill。该授权不包含覆盖已有
-> 不同内容，也不包含读取、保存或测试任何 API Key。完整读取本文后执行，不要只做摘要。
+> 不同内容，也不包含调用任何收费 API；保存 Key 仅限第 3 步用户主动提供时写入本机
+> Key 文件。完整读取本文后执行，不要只做摘要。
 
 ## 给 Codex：执行总则
 
@@ -13,9 +14,9 @@
 - 只安装两个 skill：`nebula-image-gen`（APINebula 生图/改图）和 `ark-video-gen`（火山方舟 Seedance 生视频）。
 - 将 skill 安装到 `${CODEX_HOME:-$HOME/.codex}/skills/`；Windows PowerShell 对应 `$env:CODEX_HOME`，未设置时使用 `$HOME\.codex\skills`。
 - 两个 skill 必须先全部下载到系统临时目录并验证，再统一检查冲突，最后才写入正式目录。不要在用户当前项目里留下 `setup.md`、压缩包或临时文件。
-- 不执行 skill 文件里的 API 示例，不安装 Python SDK，不发起生图/生视频请求；本协议只负责安装和安全配置引导。
+- 不执行 skill 文件里的 API 示例，不安装 Python SDK，不发起生图/生视频请求；本协议只负责安装和 Key 配置引导。
 - 不覆盖内容不同的现有 skill。遇到冲突时展示文件差异摘要并让用户决定；不要删除、移动或重命名用户已有内容。
-- 安装后告诉用户：新 skill 会从下一轮对话开始可用。不要声称 Key 已配置，除非只读存在性检查确实通过。
+- 安装后必须完成第 3 步的 Key 配置询问，才能发出最终报告。不要声称 Key 已配置，除非存在性检查确实通过或本次已成功保存。
 - 信任边界：本安装方式信任 GitHub 仓库 `Likeusewin10/claude-app-setups` 的所有者和 `main` 分支。下面的 SHA-256 只用于发现传输损坏或混合版本，不能防御仓库所有者账号或分支本身被篡改。
 
 ## 第 0 步：环境预检
@@ -62,10 +63,10 @@ https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/codex
 - 逐文件 SHA-256 与下面的发布清单完全一致：
 
 ```text
-nebula-image-gen/SKILL.md                 e09c121439e08745a7f0e6eaf04d9ad6e3a745952897bca3beca7b2dbd516da3
+nebula-image-gen/SKILL.md                 cef864fd4a40a04af79af55d045a9d22c2eb5befd606ff5b24f5ddd2e7b26edb
 nebula-image-gen/agents/openai.yaml       43d53885874e6348e1d78b949f824f4b88618edb7c1a76c614a49184e35d1fcb
 nebula-image-gen/references/api.md         6e956b4ee1438b260229a46b88e73934ba59690b9d1245b3c6dfd42b19477bce
-ark-video-gen/SKILL.md                     97ba2f3a5ca74a1375ff9ea283b39d9e7299ecdb870ac23d52c4363ada02a37b
+ark-video-gen/SKILL.md                     217b0800413071587c0d5e3f7b1474888578641092c0d62cb2f86153b7f0673d
 ark-video-gen/agents/openai.yaml           7e1831557366d2b3c72efc4bbb5ceb81a83e3c38d1660060272fa1271788ef7c
 ark-video-gen/references/api.md             92dc205b2b7e71994c9aaa4f7f27a6006e4f0e0cf2b808f006dce624407de95d
 ```
@@ -100,36 +101,55 @@ ark-video-gen/references/api.md             92dc205b2b7e71994c9aaa4f7f27a6006e4f
 - 不用 `git reset`、`git checkout`、`rm -rf` 等破坏性命令处理冲突。
 - 不把仓库整体克隆到 `~/.codex/skills`。
 - 不把 `setup.md` 安装成 skill。
-- 不修改用户的 shell 启动文件、Codex 配置文件或当前项目。
+- 不修改用户的 shell 启动文件、Codex 配置文件或当前项目（第 3 步写入 `media-skills.env` 是唯一例外）。
 
 校验门：两个目标目录均存在，且各自包含 3 个必需文件；重新运行 YAML/name/default_prompt 检查并通过。
 
-## 第 3 步：安全配置 Key
+## 第 3 步：配置 Key（询问是必做项，配置由用户决定）
 
-安装完成后，询问用户想先配置生图、生视频还是两者；这一步是可选的，不影响安装成功。只检查所选 Key 是否存在，绝不读取或显示值、长度、前缀、后缀。
+Key 的存放位置是本机 Key 文件 `${CODEX_HOME:-$HOME/.codex}/media-skills.env`（Windows：`$env:CODEX_HOME\media-skills.env`，未设置时 `$HOME\.codex\media-skills.env`），格式为每行一条 `NAME=value`。两个 skill 使用时会自动从环境变量或该文件读取。
+
+先做存在性检查（每个 Key 满足其一即算"已检测到"，不读取或显示值）：
+
+1. 环境变量 `NEBULA_API_KEY` / `ARK_API_KEY` 是否非空。
+2. Key 文件中是否存在对应的 `NEBULA_API_KEY=` / `ARK_API_KEY=` 行。
 
 macOS / Linux：
 
 ```bash
-if [ -n "${NEBULA_API_KEY:-}" ]; then echo 'NEBULA_API_KEY=set'; else echo 'NEBULA_API_KEY=unset'; fi
-if [ -n "${ARK_API_KEY:-}" ]; then echo 'ARK_API_KEY=set'; else echo 'ARK_API_KEY=unset'; fi
+if [ -n "${NEBULA_API_KEY:-}" ] || grep -q '^NEBULA_API_KEY=' "${CODEX_HOME:-$HOME/.codex}/media-skills.env" 2>/dev/null; then echo 'NEBULA_API_KEY=set'; else echo 'NEBULA_API_KEY=unset'; fi
+if [ -n "${ARK_API_KEY:-}" ] || grep -q '^ARK_API_KEY=' "${CODEX_HOME:-$HOME/.codex}/media-skills.env" 2>/dev/null; then echo 'ARK_API_KEY=set'; else echo 'ARK_API_KEY=unset'; fi
 ```
 
 Windows PowerShell：
 
 ```powershell
-"NEBULA_API_KEY=$(if ($env:NEBULA_API_KEY) { 'set' } else { 'unset' })"
-"ARK_API_KEY=$(if ($env:ARK_API_KEY) { 'set' } else { 'unset' })"
+$envFile = Join-Path (if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'media-skills.env'
+$inFile = { param($name) (Test-Path $envFile) -and (Select-String -Path $envFile -Pattern "^$name=" -Quiet) }
+"NEBULA_API_KEY=$(if ($env:NEBULA_API_KEY -or (& $inFile 'NEBULA_API_KEY')) { 'set' } else { 'unset' })"
+"ARK_API_KEY=$(if ($env:ARK_API_KEY -or (& $inFile 'ARK_API_KEY')) { 'set' } else { 'unset' })"
 ```
 
-根据检查状态引导用户：
+**只要有任何一个 Key 是 `unset`，在发出最终报告之前，必须把下面这段话（按实际状态填写）原样发给用户，然后停止等待回答；不询问直接跳到第 4 步属于违反本协议**：
 
-- 已是 `set`：只说“已检测到”，不要验证值、显示片段或调用收费 API。
-- 是 `unset`：告诉用户不要把 Key 发到聊天里，也不要把明文写入仓库、`.env`、shell 启动文件或 PowerShell 持久用户环境。
-- 优先引导用户使用当前 Codex 宿主明确提供的 Secret/凭据设置，分别保存为 `NEBULA_API_KEY` 和 `ARK_API_KEY`；不要猜测按钮名称或位置。
-- 如果当前宿主没有安全凭据入口，引导用户在**自己的本地终端**使用隐藏输入，为一个新的短生命周期 Codex 会话临时注入环境变量；命令本身不得包含 Key，Key 不写入历史、文件或持久环境。当前 Codex 无法修改其父进程环境，因此配置后需启动新会话。
-- 也可使用系统钥匙串或 Secret Manager，但必须说明调用进程如何在运行时读取并注入变量，不能只把 Key 存进去就声称配置完成。
-- 用户在聊天中粘贴 Key 时，立即视为泄露：停止使用该 Key，提醒用户去对应控制台删除并重新创建。
+> 两个 skill 已安装。API Key 状态：
+> - NEBULA_API_KEY（生图）：<已检测到 / 尚未配置>
+> - ARK_API_KEY（生视频）：<已检测到 / 尚未配置>
+>
+> 缺少的 Key 现在就可以配置：**直接把 Key 粘贴到对话框发给我**，我会保存到本机配置文件，之后不用再输。
+> - 生图 Key：打开 https://apinebula.com/ → 登录 → 控制台「创建 API 令牌」
+> - 生视频 Key：打开 https://console.volcengine.com/ark/region:cn-beijing/apiKey → 创建长效 API Key（并在「开通管理」开通 Seedance 模型）
+>
+> 一次发一个即可，我能从格式识别是哪个；也可以回复"跳过"，第一次使用时我会再引导你。
+
+**收到用户粘贴的 Key 后**：
+
+1. 去掉首尾空白，做形状检查（非空、单行、不含空格）。无法确定归属时询问一句"这是生图还是生视频的 Key？"。
+2. 写入 Key 文件对应的 `NAME=<key>` 行（目录/文件不存在则创建；已有该行则整行替换；尽可能把文件权限限制为仅当前用户可读写）。写入时用编程方式写文件，不要让 Key 出现在 shell 命令行参数里。
+3. 回复只确认已保存并显示前 6 位掩码（如 `sk-abc***`），**绝不回显完整 Key**。
+4. 提醒用户：对话记录里留有这条 Key，若客户端支持建议删除该消息；日后怀疑泄露，去对应控制台删除并重建，再发新 Key 给我覆盖即可。
+
+用户回复"跳过" → 直接进入第 4 步。已是 `set` 的 Key 只说"已检测到"，不验证值、不调用收费 API。
 
 获取凭据的官方入口：
 
@@ -137,9 +157,7 @@ Windows PowerShell：
 - 火山方舟控制台：`https://console.volcengine.com/ark/region:cn-beijing/apiKey`
 - 火山方舟视频 API 文档：`https://console.volcengine.com/ark/region:cn-beijing/docs/82379/1520757?lang=zh`
 
-如果安全凭据设置需要用户操作，给出与其当前 Codex 版本匹配的已知 UI 路径并暂停；不确定时只描述目标字段名。配置后仍然只重复本节的存在性检查。
-
-校验门：向用户明确报告两个 Key 各自的 `已检测到` / `尚未配置` 状态，过程中未读取或回显任何秘密。
+校验门：两个 Key 均为 `set`，或已向用户发出上述询问并收到明确回答（已保存 / 跳过）；除写入 Key 文件外未回显或外传任何秘密。
 
 ## 第 4 步：自验证与交付
 
@@ -150,7 +168,7 @@ Windows PowerShell：
 3. 确认两个 `references/api.md` 都存在。
 4. 告诉用户从下一轮对话开始，可以直接说“生成一张……”或“生成一个视频……”，Codex 会触发对应 skill。
 
-最终报告必须包含：安装目录、两个 skill 的安装结果、所选 Key 的存在性状态（未选择配置则写“未检查”），以及“未执行任何收费 API”。不得包含任何 Key 内容。
+最终报告必须包含：安装目录、两个 skill 的安装结果、两个 Key 的最终状态（`已检测到` / `本次已保存` / `用户选择跳过`）、Key 配置引导是否已完成，以及"未执行任何收费 API"。不得包含任何 Key 内容（掩码除外）。
 
 ## 排障速查
 
@@ -158,4 +176,4 @@ Windows PowerShell：
 - 目标目录无写权限：请求用户批准 Codex 写入该目录；不要改装到当前项目来绕过权限。
 - 现有 skill 冲突：保持原文件不变，等待用户明确选择是否备份替换。
 - YAML 校验失败或文件缺失：停止安装并报告具体相对路径；不要安装半成品。
-- Key 为 `unset`：skill 已安装仍可正常被发现，首次实际使用前再完成安全配置。
+- Key 为 `unset` 且用户选择跳过：skill 已安装仍可正常被发现，首次实际使用时 skill 自身会再次引导配置。
