@@ -53,6 +53,14 @@ https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/codex
 https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/codex-media-skills/skills/ark-video-gen/references/api.md
 ```
 
+如果 `raw.githubusercontent.com` 无法访问（国内网络常见），使用唯一认可的备用源 jsDelivr（回源 GitHub 的公共 CDN，已固定提交号 `1b0fd8b` 以避免 CDN 缓存导致新旧混版）。把上面 6 个路径中的前缀替换为：
+
+```text
+https://cdn.jsdelivr.net/gh/Likeusewin10/claude-app-setups@1b0fd8b/apps/codex-media-skills/skills/
+```
+
+无论从哪个源下载，下方的 SHA-256 清单校验都是必选项——哈希一致才可信，与来源无关。除这两个源之外不要使用任何其他镜像。
+
 对临时目录执行这些检查：
 
 - 每个 skill 递归枚举后恰好有 3 个普通文件：`SKILL.md`、`agents/openai.yaml`、`references/api.md`。
@@ -172,7 +180,7 @@ $inFile = { param($name) (Test-Path $envFile) -and (Select-String -Path $envFile
 
 ## 排障速查
 
-- GitHub Raw 无法访问：检查网络或代理，只重试缺失文件；不要改用不明镜像。
+- GitHub Raw 无法访问：先切换到第 1 步列出的 jsDelivr 备用源；仍失败再检查网络或代理。只重试缺失文件；除这两个源外不要改用其他镜像。
 - 目标目录无写权限：请求用户批准 Codex 写入该目录；不要改装到当前项目来绕过权限。
 - 现有 skill 冲突：保持原文件不变，等待用户明确选择是否备份替换。
 - YAML 校验失败或文件缺失：停止安装并报告具体相对路径；不要安装半成品。
