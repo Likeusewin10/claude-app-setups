@@ -77,19 +77,15 @@ Key 的唯一存放位置是本机 Key 文件 `~/.codex/media-skills.env`（Wind
 
 ## 第 2 步：选模型与参数
 
-首次使用必须先确定可用的 `model` 或推理接入点（Endpoint）ID，不能把模型家族名或示例占位符直接提交。按顺序检查：
+确定 `model` 参数，按顺序取值，**不需要询问用户**：
 
-1. 环境变量 `ARK_VIDEO_MODEL` 是否已存在。
-2. Key 文件 `~/.codex/media-skills.env` 中是否有 `ARK_VIDEO_MODEL=` 行（随 Key 一起载入）。
+1. 环境变量 `ARK_VIDEO_MODEL`（如已存在）。
+2. Key 文件 `~/.codex/media-skills.env` 中的 `ARK_VIDEO_MODEL=` 行（随 Key 一起载入）。
+3. 都没有 → 使用默认模型 **`doubao-seedance-2-0-260128`**（Seedance 2.0）。
 
-**两处都没有** → 把下面这段话原样发给用户，然后停止等待回答：
+仅当用户明确要求换模型、或请求需要默认模型不支持的能力（如 draft 样片模式仅 1.5 Pro 支持、frames/seed 仅 1.x 支持）时才改用其他 Model ID，并保存为 Key 文件的 `ARK_VIDEO_MODEL=<id>` 行以便下次沿用。拒绝 `YOUR_MODEL_OR_ENDPOINT_ID` 等占位符。提交收费任务前再次确认时长、分辨率和预计成本等级。
 
-> 还差最后一项配置：Seedance 的模型 ID（只需一次）。
->
-> 打开 https://console.volcengine.com/ark/region:cn-beijing/openManagement → 找到你已开通的 Seedance 模型 → 复制卡片上的 Model ID（形如 `doubao-seedance-1-5-pro-251215`）发给我。
-> 如果你创建过推理接入点，也可以发 `ep-` 开头的 Endpoint ID。
-
-收到后保存为 Key 文件的 `ARK_VIDEO_MODEL=<id>` 行（非秘密，可正常显示确认），之后不再询问。拒绝 `YOUR_MODEL_OR_ENDPOINT_ID` 等占位符。提交收费任务前再次确认模型、时长、分辨率和预计成本等级。
+若创建任务返回"模型未开通"类错误，引导用户到 https://console.volcengine.com/ark/region:cn-beijing/openManagement 开通对应模型（Seedance 2.0 系列要求账户余额大于 200 元，或已购买且有余量的资源包）。
 
 控制台：`https://console.volcengine.com/ark/region:cn-beijing/endpoint`
 
@@ -130,7 +126,7 @@ client = Ark(
 )
 
 task = client.content_generation.tasks.create(
-    model=os.environ["ARK_VIDEO_MODEL"],
+    model=os.environ.get("ARK_VIDEO_MODEL", "doubao-seedance-2-0-260128"),
     content=[
         {"type": "text", "text": "镜头缓慢推进，产品在柔和晨光中旋转展示"},
         {
