@@ -61,6 +61,12 @@ https://cdn.jsdelivr.net/gh/Likeusewin10/claude-app-setups@4ed0612/apps/codex-me
 
 无论从哪个源下载，下方的 SHA-256 清单校验都是必选项——哈希一致才可信，与来源无关。除这两个源之外不要使用任何其他镜像。
 
+Windows 下载与写文件编码规范（乱码 / 哈希不匹配的主要来源）：
+
+- 下载一律**二进制落盘**：用 `Invoke-WebRequest -Uri <url> -OutFile <path>` 或 `curl.exe -sSL -o <path>`；禁止把响应内容经管道交给 `Out-File` / `Set-Content` / `>` 重写——Windows PowerShell 5.1 默认写 UTF-16LE 或带 BOM，会同时破坏中文内容和 SHA-256。
+- 哈希不匹配且文件大小接近清单文件的两倍时，优先怀疑被重编码，按上一条重新下载，不要盲目换源。
+- 本协议后续所有写文本文件的操作（含第 3 步 Key 文件）统一使用 **UTF-8 无 BOM**：`[System.IO.File]::WriteAllText($path, $content, (New-Object System.Text.UTF8Encoding $false))`。
+
 对临时目录执行这些检查：
 
 - 每个 skill 递归枚举后恰好有 3 个普通文件：`SKILL.md`、`agents/openai.yaml`、`references/api.md`。
@@ -71,10 +77,10 @@ https://cdn.jsdelivr.net/gh/Likeusewin10/claude-app-setups@4ed0612/apps/codex-me
 - 逐文件 SHA-256 与下面的发布清单完全一致：
 
 ```text
-nebula-image-gen/SKILL.md                 35d340f7048550f3205d483dd66f650f9fea4e280058ebe1ccd2353ff9a7d342
-nebula-image-gen/agents/openai.yaml       43d53885874e6348e1d78b949f824f4b88618edb7c1a76c614a49184e35d1fcb
-nebula-image-gen/references/api.md         6e956b4ee1438b260229a46b88e73934ba59690b9d1245b3c6dfd42b19477bce
-ark-video-gen/SKILL.md                     e5d4d633bece4f05f21e4b6a5a580dc52105919c38ca0c452ecfb6a6b863f365
+nebula-image-gen/SKILL.md                 1730ecb1af04ac644984c7bb63f26e1f4269217e2c865a6b73a10c8298032204
+nebula-image-gen/agents/openai.yaml       3eb3770b5c4569b51b676bef4645f0ee9eee15ebcd3e24ff4d16bac462bcf5e7
+nebula-image-gen/references/api.md         e570b207b5750730981f016bea6a9bcd07ff10393b98667baf9644d6bbd2f513
+ark-video-gen/SKILL.md                     5a21837ffa830030a034d0cf11cce3ef1f2cb4caf2a09a211fd9690b7b8c7967
 ark-video-gen/agents/openai.yaml           7e1831557366d2b3c72efc4bbb5ceb81a83e3c38d1660060272fa1271788ef7c
 ark-video-gen/references/api.md             92dc205b2b7e71994c9aaa4f7f27a6006e4f0e0cf2b808f006dce624407de95d
 ```
@@ -153,7 +159,7 @@ $inFile = { param($name) (Test-Path $envFile) -and (Select-String -Path $envFile
 **收到用户粘贴的 Key 后**：
 
 1. 去掉首尾空白，做形状检查（非空、单行、不含空格）。无法确定归属时询问一句"这是生图还是生视频的 Key？"。
-2. 写入 Key 文件对应的 `NAME=<key>` 行（目录/文件不存在则创建；已有该行则整行替换）。权限规则分平台：macOS/Linux 执行 `chmod 600`；**Windows 不要修改 ACL**——`%USERPROFILE%` 下默认已仅限当前用户，错误的 ACL 收紧会导致后续读取被拒、Key 被误判为未配置。写入时用编程方式写文件，不要让 Key 出现在 shell 命令行参数里。
+2. 写入 Key 文件对应的 `NAME=<key>` 行（目录/文件不存在则创建；已有该行则整行替换），编码固定 **UTF-8 无 BOM**（PowerShell 用 `[System.IO.File]::WriteAllText` 配合 `New-Object System.Text.UTF8Encoding $false`；`Out-File`/`Set-Content` 的默认编码或 BOM 会让 `^NAME=` 行匹配失败、Key 被误判为未配置）。权限规则分平台：macOS/Linux 执行 `chmod 600`；**Windows 不要修改 ACL**——`%USERPROFILE%` 下默认已仅限当前用户，错误的 ACL 收紧会导致后续读取被拒、Key 被误判为未配置。写入时用编程方式写文件，不要让 Key 出现在 shell 命令行参数里。
 3. **写入后立即读回校验**：能重新读出该行且值一致，才允许报告"已保存"；读回失败视为保存失败，先修复再继续。
 4. 回复只确认已保存并显示前 6 位掩码（如 `sk-abc***`），**绝不回显完整 Key**。
 5. 提醒用户：对话记录里留有这条 Key，若客户端支持建议删除该消息；日后怀疑泄露，去对应控制台删除并重建，再发新 Key 给我覆盖即可。
@@ -186,5 +192,6 @@ $inFile = { param($name) (Test-Path $envFile) -and (Select-String -Path $envFile
 - GitHub Raw 无法访问：先切换到第 1 步列出的 jsDelivr 备用源；仍失败再检查网络或代理。只重试缺失文件；除这两个源外不要改用其他镜像。
 - 目标目录无写权限：请求用户批准 Codex 写入该目录；不要改装到当前项目来绕过权限。
 - 现有 skill 冲突：保持原文件不变，等待用户明确选择是否备份替换。
+- Windows 中文乱码或哈希反复不匹配：几乎都是 `Out-File`/`Set-Content` 重编码或 BOM 造成——下载改为二进制落盘、写文件改为 UTF-8 无 BOM 后重试。skill 正文里已有「Windows PowerShell 编码规范」章节，使用阶段照做即可。
 - YAML 校验失败或文件缺失：停止安装并报告具体相对路径；不要安装半成品。
 - Key 为 `unset` 且用户选择跳过：skill 已安装仍可正常被发现，首次实际使用时 skill 自身会再次引导配置。
