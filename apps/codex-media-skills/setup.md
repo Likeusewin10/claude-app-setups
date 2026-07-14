@@ -183,7 +183,7 @@ $inFile = { param($name) (Test-Path $envFile) -and (Select-String -Path $envFile
 1. 确认两个 `SKILL.md` 都能读取，frontmatter 名称正确。
 2. 确认两个 `agents/openai.yaml` 都能解析，且 UI 元数据完整。
 3. 确认两个 `references/api.md` 都存在。
-4. 告诉用户从下一轮对话开始，可以直接说“生成一张……”或“生成一个视频……”，Codex 会触发对应 skill。
+4. 告诉用户从下一轮对话开始，用**点名 skill** 的说法来触发，例如“使用 apinebula 生图：一张……”“用 nebula-image-gen 改图：把……”“使用 seedance 生视频：……”；也可以直接引用 `$nebula-image-gen` / `$ark-video-gen`。提醒用户不要只说“生成一张图”“生成一个视频”——泛化说法可能不会命中 skill，而是落到平台内置的预览能力，拿不到本地文件。
 
 最终报告必须包含：安装目录、两个 skill 的安装结果、两个 Key 的最终状态（`已检测到` / `本次已保存` / `用户选择跳过`）、Key 配置引导是否已完成，以及"未执行任何收费 API"。不得包含任何 Key 内容（掩码除外）。
 
