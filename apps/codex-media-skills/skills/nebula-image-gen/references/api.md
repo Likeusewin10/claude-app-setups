@@ -123,4 +123,5 @@
 
 - 常规生图/URL 素材改图 → 异步任务接口（默认）：不阻塞、失败退款、结果为可直接下载的 `download_url`。
 - 本地文件改图、蒙版重绘、需要 size / background 等细粒度参数 → 同步 Images API。
+- 长期 `queued` 排队严重 → 官方另有 `image2-vip` 分组（`docs.apinebula.com/docs/advanced/image/image2-vip`），通道独立、价格更高；参数与本分组不完全一致，使用前以其文档为准。
 - 需要把图片能力与多轮对话、工作流、工具调用组合 → 再考虑配合对话接口设计。

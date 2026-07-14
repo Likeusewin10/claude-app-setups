@@ -156,6 +156,7 @@ while time.monotonic() < deadline:
         timeout=60,
     ).json()
     status = result.get("status")
+    print(f"[{time.strftime('%H:%M:%S')}] {status}")
     if status == "completed":
         break
     if status == "failed":
@@ -245,7 +246,7 @@ while ($true) {
   $result = Invoke-RestMethod -Method Get -Uri "$base/image-tasks/${taskId}?detail=true" -Headers $headers
   if ($result.status -eq 'completed') { break }
   if ($result.status -eq 'failed') { throw "图片任务失败：$($result.error.message)" }
-  Write-Host "generating: $($result.status)"
+  Write-Host "[$([DateTime]::Now.ToString('HH:mm:ss'))] generating: $($result.status)"
   Start-Sleep -Seconds 10
 }
 
@@ -270,10 +271,24 @@ Write-Host "delivered: $($item.FullName) ($($item.Length) bytes)"
 
 ### 轮询纪律
 
+- 提交成功后先告知用户：「任务已提交（task_id），正常 1~4 分钟，请稍候」，避免看起来像卡住。
 - 每 10 秒查询一次，客户端最长等待 15 分钟；`queued` / `in_progress` 继续等，不要过早判定失败。
+- **记录状态转换时间**：submitted 时刻、首次见到 `in_progress` 的时刻、见到 `completed` 的时刻。这是慢任务归因的唯一依据。
 - `completed` 后**立即下载** `download_url` 落盘，不要把 URL 囤着以后再下。
 - `failed`：读 `error.message` 反馈给用户。异步任务最终失败或取消时按预扣额度退款，无需担心失败重复扣费；但重新提交仍是新的收费请求，先向用户确认。
 - 本地轮询超时 ≠ 任务失败：报告 task id，稍后可用详情接口继续查询，不要立刻重复提交。
+
+### 慢任务归因（总耗时 > 4 分钟时必做）
+
+用详情响应的 `created_at` / `completed_at` 和本地记录的状态转换时间拆解，向用户报告瓶颈在哪，不要笼统说"生图就是慢"：
+
+| 现象 | 归因 | 建议 |
+|---|---|---|
+| `queued` 停留长（几分钟） | 中转站排队拥堵，与模型无关 | 换时段重试；草稿降 `quality`；长期如此可考虑 `image2-vip` 分组（通道独立、更贵，见 references） |
+| `in_progress` 停留长（> 4 分钟） | 上游模型推理慢（`quality=high` 时更明显） | 草稿用 `low`/`medium`，终稿才用 `high` |
+| `completed_at - created_at` 短但端到端长 | 时间花在本地：轮询间隔、下载、脚本重试 | 检查本地网络与下载环节（`curl.exe` 是否走了代理等） |
+
+报告完成时附一行耗时拆解，例如：`排队 4m10s + 生成 1m30s + 下载 8s`。
 
 ## 同步接口（兜底：本地文件改图 / 蒙版重绘 / 特殊参数）
 
