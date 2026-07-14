@@ -44,6 +44,13 @@ Windows 控制台默认代码页是 GBK（936），中文 prompt 在「命令行
 3. Python 脚本内统一 `open(..., encoding="utf-8")`；本 skill 的 SDK 示例在进程内构造请求体，天然规避命令行编码问题，优先照用。
 4. Key 文件 `media-skills.env` 也必须是 UTF-8（无 BOM）；如果读出乱码或匹配不到 `NAME=` 行，先检查文件编码再判断 Key 是否缺失。
 
+## 运行时预检（调用前必做，尤其 Windows）
+
+1. **验证 Python 是否真正可执行**：先跑 `python -c "import sys; print(sys.version)"` 确认退出码为 0 且有输出。Windows 上 `python.exe` 经常是 Microsoft Store 占位符（位于 `...\WindowsApps\`，静默失败），本 skill 的 SDK 流程依赖真实 Python——占位符场景先定位可用解释器（如 `py -3`、绝对路径），都没有则如实告知用户需要安装 Python，不要用占位符空跑。
+2. **禁止用 `Start-Process` 或后台作业承载轮询**——受管环境中后台进程可能随工具调用结束被回收。轮询一律前台阻塞执行（SDK 示例的 while 循环本身就是前台，照用即可）。
+3. Windows 上如需在 SDK 之外单独下载 `video_url` / `last_frame_url`，首选 `curl.exe -sSL -o`；`Invoke-WebRequest` 下载大文件已知会卡住。
+4. 报告进度用「交付状态机」：`submitted → generating → downloading → delivered`。远端 `succeeded` ≠ 交付完成，只有本地 `.mp4` 校验通过才能报告"完成"。
+
 ## 第 0 步：确认 API Key（每次先做）
 
 Key 的唯一存放位置是本机 Key 文件 `~/.codex/media-skills.env`（Windows：`%USERPROFILE%\.codex\media-skills.env`），格式为每行一条 `NAME=value`。

@@ -43,6 +43,26 @@ Windows 控制台默认代码页是 GBK（936），中文 prompt 在「命令行
 3. Python 脚本内统一 `open(..., encoding="utf-8")`；HTTP 请求优先用 `requests` 的 `json=` 参数（自动 UTF-8 编码），不要手拼 `--data` 字符串。
 4. Key 文件 `media-skills.env` 也必须是 UTF-8（无 BOM）；如果读出乱码或匹配不到 `NAME=` 行，先检查文件编码再判断 Key 是否缺失。
 
+## 运行时预检（调用前必做，尤其 Windows）
+
+1. **验证 Python 是否真正可执行**，不要只看 `Get-Command python` 有结果：
+
+   ```powershell
+   $pyOk = $false
+   try { $v = & python -c "import sys; print(sys.version)" 2>&1; if ($LASTEXITCODE -eq 0 -and $v) { $pyOk = $true } } catch {}
+   ```
+
+   Windows 上 `python.exe` 经常是 **Microsoft Store 占位符**（位于 `...\WindowsApps\`，执行时静默失败或弹商店页面，请求根本发不出去）。`$pyOk` 为 false 时不要尝试修复或安装 Python，直接改走下方「PowerShell 原生异步流程」。
+2. **禁止用 `Start-Process` 或任何后台/分离进程承载轮询**——在 Codex 等受管环境中，后台进程可能随工具调用结束被回收，任务就丢了。轮询一律**前台阻塞**执行（前台循环 + `Start-Sleep`）。
+3. 确认 `curl.exe` 可用（Windows 10 1803+ 自带）：`curl.exe --version`。Windows 上下载 `download_url` **首选 `curl.exe -sSL -o`**；`Invoke-WebRequest` 下载大文件已知会卡住，只作最后兜底。
+4. 若本机笔记/记忆（如 PROJECT_MEMORY.md）中有"APINebula 没有任务 ID 接口""客户端后台异步执行"之类记录，那是旧版信息——以本文的 `/v1/image-tasks` 异步接口和前台轮询为准，并顺手更正该记录。
+
+## 交付状态机（报告进度用语，防误判）
+
+`submitted（任务已提交，拿到 task_id）→ generating（远端 queued/in_progress）→ downloading（远端 completed，开始下载）→ delivered（本地文件已落盘且大小 > 0）`
+
+**远端 `completed` ≠ 交付完成**——那只是进入 downloading 的信号。只有 delivered（本地文件校验通过）才能向用户报告"完成"。
+
 ## 第 0 步：确认 API Key（每次先做）
 
 Key 的唯一存放位置是本机 Key 文件 `~/.codex/media-skills.env`（Windows：`%USERPROFILE%\.codex\media-skills.env`），格式为每行一条 `NAME=value`。
@@ -98,7 +118,7 @@ Key 的唯一存放位置是本机 Key 文件 `~/.codex/media-skills.env`（Wind
 
 ## 第 3 步：调用（默认异步：创建 → 轮询 → 下载）
 
-Python 示例跨平台，所有平台优先使用本方式；Windows 上必须先按「编码规范」把脚本以 UTF-8（无 BOM）写入 `.py` 文件后执行，不要用 `python -c` 传中文。
+按「运行时预检」选择实现：Python 可执行 → 用 Python 示例；否则（Windows 常见）→ 用 PowerShell 原生流程。两者流程一致：提交拿 task_id → **前台**轮询 → `curl.exe` 下载 → 校验落盘。Windows 上必须先按「编码规范」把脚本以 UTF-8（无 BOM）写入文件后执行，不要用 `python -c` 传中文。
 
 ### 异步文生图（Python，含轮询与落盘）
 
@@ -187,6 +207,66 @@ task = requests.post(
     timeout=60,
 )
 ```
+
+### 异步文生图（Windows PowerShell 原生，Python 不可用时的完整流程）
+
+前台阻塞执行整段脚本；prompt 先按「编码规范」以 UTF-8 无 BOM 写入 `request.json`，不要内联在命令行里。
+
+`request.json`：
+
+```json
+{
+  "model": "gpt-image-2",
+  "prompt": "一张简洁的商业产品图，浅灰背景中摆放一只银白色无线耳机充电盒，光线柔和，细节清晰。",
+  "quality": "medium"
+}
+```
+
+主流程（整体保存为 UTF-8 无 BOM 的 `.ps1` 后前台执行）：
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$base = 'https://apinebula.com/v1'
+$headers = @{ Authorization = "Bearer $env:NEBULA_API_KEY" }
+
+# 1. submitted：提交任务（body 从 UTF-8 文件读，避免编码问题）
+$body = [System.IO.File]::ReadAllText('request.json', [System.Text.Encoding]::UTF8)
+$task = Invoke-RestMethod -Method Post -Uri "$base/image-tasks/generations" `
+  -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $body
+$taskId = $task.task_id
+Write-Host "submitted: $taskId"
+
+# 2. generating：前台轮询（禁止 Start-Process / 后台作业）
+$deadline = [DateTime]::UtcNow.AddMinutes(15)
+while ($true) {
+  if ([DateTime]::UtcNow -gt $deadline) {
+    throw "本地轮询超时；远端任务 $taskId 可能仍在执行，稍后可再查询。"
+  }
+  $result = Invoke-RestMethod -Method Get -Uri "$base/image-tasks/${taskId}?detail=true" -Headers $headers
+  if ($result.status -eq 'completed') { break }
+  if ($result.status -eq 'failed') { throw "图片任务失败：$($result.error.message)" }
+  Write-Host "generating: $($result.status)"
+  Start-Sleep -Seconds 10
+}
+
+# 3. downloading：用 curl.exe 下载（不要用 Invoke-WebRequest，大文件会卡住）
+$downloadUrl = $result.detail.data[0].download_url
+$outputPath = Join-Path (Get-Location) ("generated-image-{0}.png" -f [guid]::NewGuid().ToString('N').Substring(0,12))
+Write-Host "downloading: $downloadUrl"
+& curl.exe -sSL --max-time 300 -o $outputPath $downloadUrl
+if ($LASTEXITCODE -ne 0) { throw "curl.exe 下载失败，退出码 $LASTEXITCODE" }
+
+# 4. delivered：校验 PNG（文件存在、大小 > 0、魔数 89 50 4E 47）
+$item = Get-Item -LiteralPath $outputPath
+if ($item.Length -le 0) { throw "下载文件为空：$outputPath" }
+$magic = [System.IO.File]::ReadAllBytes($outputPath)[0..3]
+if (-not ($magic[0] -eq 0x89 -and $magic[1] -eq 0x50 -and $magic[2] -eq 0x4E -and $magic[3] -eq 0x47)) {
+  throw "文件不是有效 PNG（可能下载到了错误页）：$outputPath"
+}
+Write-Host "delivered: $($item.FullName) ($($item.Length) bytes)"
+```
+
+异步改图同理：把提交端点换成 `$base/image-tasks/edits`、`request.json` 里加 `images` URL 列表即可，轮询与下载不变。
 
 ### 轮询纪律
 
@@ -284,6 +364,10 @@ echo "响应已保存到受限临时文件，未输出到终端：$RESPONSE_FILE
 | 蒙版 | 蒙版与原图尺寸必须一致，且需带 alpha 通道 | 先检查两图尺寸再提交 |
 | response_format | 同步 `url` 返回的链接可能过期；异步 `download_url` 同理 | 拿到即下载落盘，不要囤链接 |
 | Windows 乱码 | GBK 控制台 + `Out-File` 默认编码会把中文 prompt 变乱码 | 按顶部「编码规范」执行；prompt 一律经 UTF-8 文件传递 |
+| 假 Python | `python.exe` 是 Microsoft Store 占位符，命令静默失败，请求根本没发出 | 按「运行时预检」先跑 `python -c` 验证；失败改走 PowerShell 原生流程 |
+| 后台轮询丢任务 | `Start-Process` / 后台作业在受管环境随工具调用结束被回收 | 轮询一律前台阻塞循环 + `Start-Sleep` |
+| Invoke-WebRequest 卡死 | 下载大文件已知会挂起 | Windows 下载 `download_url` 首选 `curl.exe -sSL -o` |
+| completed ≠ 交付 | 远端 `completed` 时图片还没下载，容易误报完成 | 按「交付状态机」：只有本地校验通过（delivered）才算完成 |
 
 ## 失败处理
 
@@ -295,6 +379,6 @@ echo "响应已保存到受限临时文件，未输出到终端：$RESPONSE_FILE
 
 ## 交付纪律
 
-1. 图片一律落盘为 `.png`；报告前先确认文件存在且大小 > 0，然后向用户报告**绝对路径**。只出现在界面预览里、没有落盘路径的图片不算交付。
+1. 图片一律落盘为 `.png`；报告前先确认文件存在、大小 > 0 且 PNG 魔数（`89 50 4E 47`）正确，然后向用户报告**绝对路径**。只出现在界面预览里、没有落盘路径的图片不算交付；远端 `completed` 但未下载也不算交付（见「交付状态机」）。
 2. 一次任务多张图时，文件名带序号和语义（`product-hero-01.png`）。
 3. 报告中附上实际使用的 prompt，方便用户微调后重跑。

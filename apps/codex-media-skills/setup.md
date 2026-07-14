@@ -77,10 +77,10 @@ Windows 下载与写文件编码规范（乱码 / 哈希不匹配的主要来源
 - 逐文件 SHA-256 与下面的发布清单完全一致：
 
 ```text
-nebula-image-gen/SKILL.md                 1730ecb1af04ac644984c7bb63f26e1f4269217e2c865a6b73a10c8298032204
+nebula-image-gen/SKILL.md                 2ffc6eec7e25d9133d2a186daa2a09baed4906ed9b866a784d92ed0668c82776
 nebula-image-gen/agents/openai.yaml       3eb3770b5c4569b51b676bef4645f0ee9eee15ebcd3e24ff4d16bac462bcf5e7
 nebula-image-gen/references/api.md         e570b207b5750730981f016bea6a9bcd07ff10393b98667baf9644d6bbd2f513
-ark-video-gen/SKILL.md                     5a21837ffa830030a034d0cf11cce3ef1f2cb4caf2a09a211fd9690b7b8c7967
+ark-video-gen/SKILL.md                     6ded42eb68909ee90d7c3adeae07737dd54d154f27c0ff8911c718f7b3717879
 ark-video-gen/agents/openai.yaml           7e1831557366d2b3c72efc4bbb5ceb81a83e3c38d1660060272fa1271788ef7c
 ark-video-gen/references/api.md             92dc205b2b7e71994c9aaa4f7f27a6006e4f0e0cf2b808f006dce624407de95d
 ```
