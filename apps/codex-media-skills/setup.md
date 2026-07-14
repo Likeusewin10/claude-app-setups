@@ -53,10 +53,10 @@ https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/codex
 https://raw.githubusercontent.com/Likeusewin10/claude-app-setups/main/apps/codex-media-skills/skills/ark-video-gen/references/api.md
 ```
 
-如果 `raw.githubusercontent.com` 无法访问（国内网络常见），使用唯一认可的备用源 jsDelivr（回源 GitHub 的公共 CDN，已固定提交号 `2d8d83c` 以避免 CDN 缓存导致新旧混版）。把上面 6 个路径中的前缀替换为：
+如果 `raw.githubusercontent.com` 无法访问（国内网络常见），使用唯一认可的备用源 jsDelivr（回源 GitHub 的公共 CDN，已固定提交号 `77781da` 以避免 CDN 缓存导致新旧混版）。把上面 6 个路径中的前缀替换为：
 
 ```text
-https://cdn.jsdelivr.net/gh/Likeusewin10/claude-app-setups@2d8d83c/apps/codex-media-skills/skills/
+https://cdn.jsdelivr.net/gh/Likeusewin10/claude-app-setups@77781da/apps/codex-media-skills/skills/
 ```
 
 无论从哪个源下载，下方的 SHA-256 清单校验都是必选项——哈希一致才可信，与来源无关。除这两个源之外不要使用任何其他镜像。
