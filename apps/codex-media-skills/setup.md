@@ -192,6 +192,7 @@ $inFile = { param($name) (Test-Path $envFile) -and (Select-String -Path $envFile
 - GitHub Raw 无法访问：先切换到第 1 步列出的 jsDelivr 备用源；仍失败再检查网络或代理。只重试缺失文件；除这两个源外不要改用其他镜像。
 - 目标目录无写权限：请求用户批准 Codex 写入该目录；不要改装到当前项目来绕过权限。
 - 现有 skill 冲突：保持原文件不变，等待用户明确选择是否备份替换。
+- 哈希全部或成批不匹配、但文件结构和 YAML 校验都正常：大概率是读到了 **CDN 缓存的旧版 setup.md**（raw.githubusercontent.com 缓存约 5 分钟，发新版后短时间内易撞上）。先给 setup.md 的 URL 追加 `?ts=<当前时间戳>` 重新获取最新清单再比对；仍不一致才按"远端漂移"处理，保留本机版本并报告。
 - Windows 中文乱码或哈希反复不匹配：几乎都是 `Out-File`/`Set-Content` 重编码或 BOM 造成——下载改为二进制落盘、写文件改为 UTF-8 无 BOM 后重试。skill 正文里已有「Windows PowerShell 编码规范」章节，使用阶段照做即可。
 - YAML 校验失败或文件缺失：停止安装并报告具体相对路径；不要安装半成品。
 - Key 为 `unset` 且用户选择跳过：skill 已安装仍可正常被发现，首次实际使用时 skill 自身会再次引导配置。
